@@ -81,6 +81,24 @@ No undocumented endpoint, provider success, retry rule, or sandbox signature
 was added. Account identity verification remains abstract because NIN
 verification is documented as live-only and feature access is merchant-specific.
 
+Reconsulted on 2026-07-18 for the durable worker milestone:
+
+- [Card Tokenization](https://developers.monnify.com/docs/collections/recurring-payments/card-tokenization) —
+  initialize a transaction before a token charge, bind the saved token to the
+  same customer email, and verify every resulting transaction before value is
+  credited.
+- [Direct Debits](https://developers.monnify.com/docs/collections/recurring-payments/direct-debit) and
+  [Retry & Failure Handling](https://developers.monnify.com/docs/collections/recurring-payments/retry-failure-handling) —
+  debit-status polling, successful-payment verification, and the maximum of two
+  NIP mandate debits per day. Collage applies the stricter rolling-24-hour
+  interpretation because the page does not specify a provider day boundary.
+- [Verify Transactions](https://developers.monnify.com/docs/collections/manage-payments/verify-transactions) —
+  payment reference, amount, and currency are checked before a contribution is
+  ledgered.
+- [Single Transfers](https://developers.monnify.com/docs/disbursements/single-transfers) —
+  caller references, asynchronous transfer initiation, pending/MFA states, and
+  status polling before any retry or payout completion.
+
 ## SMSGate
 
 Consulted on 2026-07-18 before implementing the OTP transport:

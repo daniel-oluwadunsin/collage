@@ -16,9 +16,15 @@
   "dependencies": {
     "@collage/config": "workspace:*",
     "@collage/contracts": "workspace:*",
+    "@collage/database": "workspace:*",
+    "@collage/domain": "workspace:*",
     "@collage/logger": "workspace:*",
+    "@collage/monnify": "workspace:*",
+    "@collage/queue": "workspace:*",
+    "@collage/security": "workspace:*",
     "bullmq": "5.80.8",
-    "express": "5.2.1"
+    "express": "5.2.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@collage/eslint-config": "workspace:*",

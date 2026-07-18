@@ -255,15 +255,33 @@ importers:
       '@collage/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@collage/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@collage/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@collage/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@collage/monnify':
+        specifier: workspace:*
+        version: link:../../packages/monnify
+      '@collage/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
+      '@collage/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       bullmq:
         specifier: 5.80.8
         version: 5.80.8
       express:
         specifier: 5.2.1
         version: 5.2.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@collage/eslint-config':
         specifier: workspace:*

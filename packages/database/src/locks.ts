@@ -52,6 +52,17 @@ export const lockCycle = async (
   expectLocked(rows, "Cycle");
 };
 
+export const lockContribution = async (
+  transaction: TransactionClient,
+  contributionId: string,
+): Promise<void> => {
+  const rows = await transaction.$queryRaw<LockedId[]>`
+    SELECT "id" FROM "cycle_contributions"
+    WHERE "id" = ${contributionId}::uuid FOR UPDATE
+  `;
+  expectLocked(rows, "Contribution");
+};
+
 export const lockPayout = async (
   transaction: TransactionClient,
   payoutId: string,

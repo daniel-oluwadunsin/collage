@@ -219,10 +219,82 @@ export const botEnvironmentSchema = serviceEnvironmentSchema
 export const workerEnvironmentSchema = serviceEnvironmentSchema
   .extend({
     WORKER_HEALTH_PORT: portSchema.default(4002),
+    MONNIFY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+    MONNIFY_BASE_URL: urlSchema,
+    MONNIFY_API_KEY: z.string(),
+    MONNIFY_SECRET_KEY: z.string(),
+    MONNIFY_CONTRACT_CODE: z.string(),
+    MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().min(1).optional(),
+    ),
+    API_PUBLIC_URL: urlSchema,
+    WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .default(3),
+    WORKER_PENDING_POLL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(15)
+      .max(3_600)
+      .default(60),
+    WORKER_STALE_OPERATION_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1_440)
+      .default(15),
+    WORKER_OUTBOX_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(1),
+    WORKER_LIFECYCLE_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(4),
+    WORKER_PAYMENT_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .default(10),
+    WORKER_PAYOUT_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .default(2),
+    WORKER_REMINDER_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .default(2),
   })
   .and(persistenceEnvironmentSchema)
   .and(cryptographyEnvironmentSchema)
-  .and(providerSwitchSchema);
+  .and(providerSwitchSchema)
+  .superRefine((value, context) => {
+    if (
+      value.PROVIDER_CALLS_ENABLED &&
+      ([
+        value.MONNIFY_API_KEY,
+        value.MONNIFY_SECRET_KEY,
+        value.MONNIFY_CONTRACT_CODE,
+      ].some((credential) => credential.length === 0) ||
+        value.MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Monnify credentials are required when worker provider calls are enabled",
+      });
+    }
+  });
+
+export type WorkerEnvironment = z.output<typeof workerEnvironmentSchema>;
 
 export const miniAppEnvironmentSchema = serviceEnvironmentSchema.extend({
   PORT: portSchema.default(3000),

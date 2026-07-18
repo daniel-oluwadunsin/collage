@@ -993,6 +993,11 @@ export class DatabaseWorkflowService implements WorkflowService {
       data: {
         memberId: member.id,
         type: "CARD_TOKEN",
+        customerEmailEncrypted: encryptString(
+          value.customerEmail,
+          this.options.encryption,
+          `payment-method:${member.id}:customer-email`,
+        ),
         cardAuthorizations: {
           create: {
             setupAmountMinor: collage.cardSetupAmountMinor,

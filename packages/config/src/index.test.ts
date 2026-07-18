@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { apiEnvironmentSchema } from "./index.js";
+import { apiEnvironmentSchema, workerEnvironmentSchema } from "./index.js";
 
 const valid = {
   DATABASE_URL: "postgresql://user:password@localhost:5432/collage",
@@ -26,6 +26,17 @@ void test("parses service environment with provider calls disabled by default", 
   const parsed = apiEnvironmentSchema.parse(valid);
   assert.equal(parsed.PROVIDER_CALLS_ENABLED, false);
   assert.equal(parsed.API_PORT, 4000);
+});
+
+void test("allows a provider-disabled worker without Monnify credentials", () => {
+  const parsed = workerEnvironmentSchema.parse({
+    ...valid,
+    NODE_ENV: "test",
+    PROVIDER_CALLS_ENABLED: "false",
+    MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER: "",
+  });
+  assert.equal(parsed.PROVIDER_CALLS_ENABLED, false);
+  assert.equal(parsed.MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER, undefined);
 });
 
 void test("rejects short secrets and malformed encryption keys", () => {

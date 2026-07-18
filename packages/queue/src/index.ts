@@ -51,16 +51,50 @@ export const deterministicJobId = (
 };
 
 export const outboxJobSchema = z.object({
-  eventId: z.uuid(),
+  operation: z.literal("publish-batch"),
 });
 
 export const contributionJobSchema = z.object({
   contributionId: z.uuid(),
+  operation: z.enum(["charge", "poll", "evaluate"]),
 });
 
 export const payoutJobSchema = z.object({
   payoutId: z.uuid(),
+  operation: z.enum(["initiate", "poll", "retry"]),
 });
+
+export const lifecycleJobSchema = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("start-collage"), collageId: z.uuid() }),
+  z.object({ operation: z.literal("open-cycle"), cycleId: z.uuid() }),
+  z.object({ operation: z.literal("deadline"), cycleId: z.uuid() }),
+  z.object({ operation: z.literal("grace-ended"), cycleId: z.uuid() }),
+  z.object({ operation: z.literal("complete-cycle"), cycleId: z.uuid() }),
+]);
+
+export const reminderJobSchema = z.object({
+  cycleId: z.uuid(),
+  scheduledFor: z.iso.datetime(),
+});
+
+export const reconciliationJobSchema = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("payment"), attemptId: z.uuid() }),
+  z.object({ operation: z.literal("payout"), attemptId: z.uuid() }),
+  z.object({ operation: z.literal("webhook"), webhookEventId: z.uuid() }),
+  z.object({ operation: z.literal("sweep") }),
+]);
+
+export const maintenanceJobSchema = z.object({
+  operation: z.enum(["recover-stale", "reconcile-ledger"]),
+});
+
+export type ContributionJob = z.infer<typeof contributionJobSchema>;
+export type LifecycleJob = z.infer<typeof lifecycleJobSchema>;
+export type MaintenanceJob = z.infer<typeof maintenanceJobSchema>;
+export type OutboxJob = z.infer<typeof outboxJobSchema>;
+export type PayoutJob = z.infer<typeof payoutJobSchema>;
+export type ReconciliationJob = z.infer<typeof reconciliationJobSchema>;
+export type ReminderJob = z.infer<typeof reminderJobSchema>;
 
 export const telegramNotificationTypeSchema = z.enum([
   "registration.completed",

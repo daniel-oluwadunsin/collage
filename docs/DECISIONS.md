@@ -258,3 +258,57 @@
   local acknowledgement can be one atomic transaction. A process loss after
   Telegram accepts a send but before the completed marker is written remains an
   unavoidable ambiguous edge and must not be described as exactly-once.
+
+## D-027 — Provider side effects use persist-call-poll
+
+- Date: 2026-07-18
+- Decision: an automatic charge or payout attempt and its deterministic caller
+  reference are committed before the provider call. A timeout, process loss, or
+  otherwise unknown response changes the operation to `UNKNOWN` and schedules a
+  status query for that original reference. It never creates or submits a new
+  provider operation while the original is unresolved.
+- Reason: a database transaction cannot atomically commit with Monnify. This
+  pattern makes replay safe without pretending distributed exactly-once
+  delivery is available.
+
+## D-028 — Readiness is a three-way financial proof
+
+- Date: 2026-07-18
+- Decision: payout creation requires every cycle contribution to be `PAID`,
+  confirmed contribution totals to equal the expected amount, and the
+  append-only `COLLAGE_POT` balance to equal the same amount under a cycle lock.
+  A successful, amount/reference-matched transfer debits the pot before the
+  cycle completes. Only then may the next scheduled cycle open.
+- Reason: database state, provider verification, and ledger state must agree
+  independently before custody moves.
+
+## D-029 — Direct-debit daily limits are enforced conservatively
+
+- Date: 2026-07-18
+- Decision: Collage permits at most two mandate debit submissions in any rolling
+  24-hour window and delays another attempt until the oldest submission leaves
+  that window. Failures remain bounded by the overall automatic-attempt policy.
+- Reason: Monnify documents a two-debits-per-day NIP limit but does not specify
+  a timezone/day-boundary contract. A rolling window is stricter and therefore
+  safer than assuming a reset boundary.
+
+## D-030 — Recurring card initialization retains only encrypted email
+
+- Date: 2026-07-18
+- Decision: the customer email used for card setup is AES-256-GCM encrypted on
+  the payment method and reused only to initialize later token-charge
+  transactions. It is never included in DTOs, logs, audit metadata, or jobs.
+- Reason: Monnify binds a card token to the same email and requires a newly
+  initialized transaction for a charge. The worker needs that value while
+  preserving Collage's privacy boundary.
+
+## D-031 — Outbox events drive queues and notifications
+
+- Date: 2026-07-18
+- Decision: state changes, audit records, and outbox events commit together.
+  The outbox publisher uses deterministic BullMQ job IDs and marks an event
+  published only after all derived financial and Telegram jobs are accepted.
+  Reconciliation and stale-operation schedulers are BullMQ Job Schedulers, not
+  process-local timers.
+- Reason: an application crash or Redis outage must leave a replayable database
+  fact. Deterministic queue identity makes duplicate publication harmless.

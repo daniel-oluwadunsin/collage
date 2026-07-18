@@ -337,3 +337,77 @@ operator credentials.
   completion marker. A crash in that narrow interval can cause a replay; the
   implementation documents this instead of claiming provider-level
   exactly-once delivery.
+
+## Milestone 5 — Durable automation worker
+
+Status: implemented on 2026-07-18; live Monnify and operator MFA validation
+remain deployment gates.
+
+### Delivered
+
+- [x] Separate BullMQ worker runtime with queue-specific concurrency, bounded
+      retry/backoff, Prometheus-format metrics, dependency-aware readiness, and
+      graceful worker/queue/database/Redis shutdown.
+- [x] Transactional-outbox publisher with deterministic downstream identities,
+      crash replay, invalid-payload failure recording, and recurring BullMQ Job
+      Schedulers for publication, stale recovery, and reconciliation.
+- [x] Exactly-once Collage schedule materialization, immutable daily/weekly/
+      monthly/yearly cycle dates, member-preference charge dates, lifecycle
+      deadlines/grace, and delayed collection/reminder jobs.
+- [x] Card-token and mandate collection orchestration with source-of-truth
+      reloads, persisted provider references, encrypted credentials/email,
+      mandatory transaction verification, provider-aware bounded cadence,
+      rolling two-debit daily enforcement, and manual-payment fallback.
+- [x] Unknown/pending payment polling, webhook-triggered server verification,
+      stale-operation recovery, no blind provider retries, and unresolved
+      payment preservation through grace blocking.
+- [x] One group reminder containing all definitely owing members while
+      excluding paid members and unresolved provider attempts.
+- [x] Deadline, grace, delinquent/default, blocked-cycle, registered-member
+      leave obligation, and recovery-to-readiness handling.
+- [x] Payout eligibility proof across contribution state, confirmed totals, and
+      Collage-specific ledger balance; unique payout/attempt creation;
+      transfer initiation; pending/MFA/status polling; terminal retry gating;
+      and reference/amount verification.
+- [x] Balanced append-only contribution and payout ledger entries, cycle/payout
+      audit/outbox writes, successful-payout completion, next-cycle opening only
+      after success, and final Collage completion.
+- [x] Reconciliation mismatch audit/outbox alerts and stale payment/payout/
+      lifecycle recovery sweeps.
+- [x] Telegram notification production for registration, start, failed charge,
+      reminders, member leave, blocked cycle, payout processing/success/failure,
+      and completion; the bot remains the delivery-only consumer.
+- [x] PostgreSQL migration for encrypted recurring-card customer email and
+      matching API write path.
+
+### Verification evidence
+
+| Command/evidence                                            | Result                                    |
+| ----------------------------------------------------------- | ----------------------------------------- |
+| Worker lint                                                 | Pass                                      |
+| Worker strict TypeScript                                    | Pass                                      |
+| Worker unit tests                                           | Pass — retry/deadline policies            |
+| Worker PostgreSQL integration tests                         | Pass — 10/10 total, none skipped          |
+| Concurrent start/replay                                     | Pass — one schedule and one audit         |
+| Outbox crash/Redis-outage replay                            | Pass — unpublished then deterministic     |
+| Strict-cycle unresolved-attempt preservation                | Pass                                      |
+| Payout readiness race and successful next-cycle transition  | Pass — one payout, next opens after paid  |
+| Consolidated reminder excluding pending provider operations | Pass                                      |
+| Repository format, lint, and strict TypeScript              | Pass                                      |
+| Repository unit tests and database/API/bot integrations     | Pass; worker PostgreSQL 10/10             |
+| Repository build                                            | Pass — all 16 build tasks                 |
+| Worker readiness and metrics runtime smoke                  | Pass against Compose PostgreSQL/Redis     |
+| Worker production image `collage-worker:milestone5-test`    | Pass on first build                       |
+| Final image rebuild after config-only correction            | Registry fetch failed; code stages passed |
+
+### Material deployment gates
+
+- Monnify card tokenization, direct debit, and disbursement must be enabled for
+  the production contract and exercised with operator-owned sandbox/live
+  fixtures before money movement is enabled.
+- A transfer that Monnify reports as pending authorization/MFA remains pending
+  and is polled. The current official-page set does not establish an
+  unattended MFA submission policy; production must select and document the
+  operator authorization procedure.
+- Provider calls remain disabled by default. No external Monnify or Telegram
+  request was made by this milestone's tests.

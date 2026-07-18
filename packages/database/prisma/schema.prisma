@@ -410,6 +410,7 @@ model PaymentMethod {
   state                     PaymentMethodState   @default(AUTHORIZING)
   provider                  String               @default("MONNIFY") @db.VarChar(32)
   providerCustomerReference String?              @db.VarChar(128)
+  customerEmailEncrypted    String?
   credentialEncrypted       String?
   credentialHash            String?              @db.Char(64)
   maskedLabel               String?              @db.VarChar(64)

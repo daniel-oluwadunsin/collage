@@ -1593,13 +1593,26 @@ export class DatabaseWorkflowService implements WorkflowService {
       );
     }
     if (operation === "chats.status-card") {
-      const value = z.object({ telegramChatId: z.string() }).parse(input);
+      const value = z
+        .object({
+          telegramChatId: z.string(),
+          variant: z.enum(["status", "rules"]).default("status"),
+        })
+        .parse(input);
       const chat = await this.options.client.telegramChat.findUnique({
         where: { telegramChatId: value.telegramChatId },
         include: {
           collages: {
-            where: { state: { notIn: ["COMPLETED", "CANCELLED"] } },
-            include: { _count: { select: { members: true } } },
+            where: { state: { not: "CANCELLED" } },
+            orderBy: { createdAt: "desc" },
+            include: {
+              _count: { select: { members: true } },
+              cycles: {
+                orderBy: { number: "desc" },
+                take: 1,
+                include: { payout: { select: { state: true } } },
+              },
+            },
             take: 1,
           },
         },
@@ -1620,7 +1633,7 @@ export class DatabaseWorkflowService implements WorkflowService {
           buttons: [
             {
               label: "Create Collage",
-              url: `${this.options.miniAppUrl}?startapp=${encodeURIComponent(token)}`,
+              startAppToken: token,
             },
           ],
           pin: true,
@@ -1629,20 +1642,31 @@ export class DatabaseWorkflowService implements WorkflowService {
       }
       const token = await this.options.launchTokens.issue(
         {
-          action: "VIEW_COLLAGE",
+          action: value.variant === "rules" ? "VIEW_RULES" : "VIEW_COLLAGE",
           chatId: chat.id,
           collageId: collage.id,
         },
         new Date(Date.now() + 5 * 60_000),
       );
+      const cycle = collage.cycles[0];
+      const payoutProcessing =
+        cycle?.state === "PAYOUT_PROCESSING" ||
+        (cycle?.payout !== null &&
+          cycle?.payout !== undefined &&
+          ["PROCESSING", "PENDING_AUTHORIZATION", "IN_PROGRESS"].includes(
+            cycle.payout.state,
+          ));
+      const state = payoutProcessing ? "PAYOUT_PROCESSING" : collage.state;
+      const statusText = `<b>${escapeTelegramHtml(collage.name)}</b>\nState: ${state}\nMembers: ${String(collage._count.members)}/${String(collage.participantLimit)}\nContribution: ${escapeTelegramHtml(collage.currency)} ${collage.contributionAmountMinor.toString()} minor units`;
+      const rulesText = `<b>${escapeTelegramHtml(collage.name)} rules</b>\nContribution: ${escapeTelegramHtml(collage.currency)} ${collage.contributionAmountMinor.toString()} minor units\nFrequency: ${collage.frequency.toLowerCase()}\nParticipants: ${String(collage.participantLimit)}\nOpen Collage to review and consent to the complete immutable rules.`;
       return asData({
-        state: collage.state,
-        text: `<b>${escapeTelegramHtml(collage.name)}</b>\nState: ${collage.state}\nMembers: ${String(collage._count.members)}/${String(collage.participantLimit)}\nContribution: NGN ${collage.contributionAmountMinor.toString()} minor units`,
+        state,
+        text: value.variant === "rules" ? rulesText : statusText,
         parseMode: "HTML",
         buttons: [
           {
-            label: "Open Collage",
-            url: `${this.options.miniAppUrl}?startapp=${encodeURIComponent(token)}`,
+            label: value.variant === "rules" ? "Review rules" : "Open Collage",
+            startAppToken: token,
           },
         ],
         pin: true,
@@ -1732,6 +1756,12 @@ export class DatabaseWorkflowService implements WorkflowService {
     if (chat === null)
       throw conflict("TELEGRAM_ENTITY_NOT_SYNCED", "Chat is not synchronized.");
     const leaving = operation === "events.member-left";
+    const existingMembership =
+      await this.options.client.telegramChatMembership.findUnique({
+        where: { chatId_userId: { chatId: chat.id, userId: identity.userId } },
+        select: { state: true },
+      });
+    const newlyLeaving = leaving && existingMembership?.state !== "LEFT";
     const membership = await this.options.client.telegramChatMembership.upsert({
       where: { chatId_userId: { chatId: chat.id, userId: identity.userId } },
       create: {
@@ -1761,20 +1791,37 @@ export class DatabaseWorkflowService implements WorkflowService {
         safeMetadata: {},
       },
     });
-    if (leaving) {
-      const members = await this.options.client.collageMember.findMany({
+    let registeredMembers: readonly {
+      readonly id: string;
+      readonly state: string;
+    }[] = [];
+    if (newlyLeaving) {
+      registeredMembers = await this.options.client.collageMember.findMany({
         where: {
           userId: identity.userId,
           collage: { chatId: chat.id },
         },
-        select: { id: true },
+        select: { id: true, state: true },
       });
       await Promise.all(
-        members.map(({ id }) =>
+        registeredMembers.map(({ id }) =>
           markMemberLeftTelegram(this.options.client, id, new Date()),
         ),
       );
     }
-    return asData(membership);
+    const wasRegistered = registeredMembers.some(({ state }) =>
+      ["REGISTERED", "AT_RISK", "DELINQUENT", "DEFAULTED"].includes(state),
+    );
+    return asData({
+      membership,
+      notification:
+        newlyLeaving && wasRegistered
+          ? {
+              text: `<b>Registered member left</b>\n${escapeTelegramHtml(value.firstName)} left the Telegram group. Their Collage obligations remain in force and the cycle status will be reconciled.`,
+              parseMode: "HTML",
+              buttons: [],
+            }
+          : null,
+    });
   }
 }

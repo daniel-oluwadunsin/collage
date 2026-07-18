@@ -274,3 +274,66 @@ concluding repository checks.
 | `docker compose config --quiet`              | Pass                                        |
 | API multi-stage image build                  | Pass                                        |
 | Compose migrate/API readiness smoke          | Pass — non-root API returned ready          |
+
+## Milestone 4 — Telegram bot
+
+Status: implemented on 2026-07-18; live BotFather/group validation requires
+operator credentials.
+
+### Delivered
+
+- [x] Separate grammY + Express webhook service with constant-time
+      `X-Telegram-Bot-Api-Secret-Token` validation.
+- [x] Startup command and webhook registration with the explicit `message`,
+      `my_chat_member`, and `chat_member` allowed-update set.
+- [x] Bot-added and membership handling, fresh Telegram permission/admin
+      checks, and actionable missing-pin-permission guidance.
+- [x] `/collage`, `/status`, `/rules`, `/help`, privacy-mode command addressing,
+      and explicit bot-mention detection.
+- [x] API-approved no-Collage, registration, active, blocked,
+      payout-processing, completed, suspended, and starting status-card states.
+- [x] Opaque API-issued launch tokens materialized as documented compact direct
+      Mini App links.
+- [x] New-member synchronization/welcome and registered-member leave handling
+      with obligations preserved by the API.
+- [x] Pinned status create/edit/fallback behavior and internal pinned-message
+      recording.
+- [x] BullMQ `telegram-notifications` consumer contract for registration,
+      start, failed charge, reminders, member leave, blocked cycle, payout
+      processing/success/failure, and completion.
+- [x] Safe HTML escaping/mentions, bounded Telegram `retry_after` handling,
+      atomic Redis delivery claims, release-on-failure, and 90-day completion
+      markers.
+- [x] Dependency-aware readiness, liveness, Pino error reporting, and graceful
+      HTTP/worker/Redis shutdown.
+- [x] Package boundaries continue to prohibit bot imports of database,
+      Monnify, and SMSGate.
+
+### Verification evidence
+
+| Command/evidence                                      | Result                             |
+| ----------------------------------------------------- | ---------------------------------- |
+| `pnpm install --frozen-lockfile`                      | Pass — 19 workspace projects       |
+| `pnpm format:check`                                   | Pass                               |
+| `pnpm lint`                                           | Pass — 27 Turbo tasks              |
+| `pnpm typecheck`                                      | Pass — 27 Turbo tasks              |
+| `pnpm test`                                           | Pass — Redis test separate         |
+| Bot Redis integration (`TEST_REDIS_URL=...`)          | Pass — bot 11/11, none skipped     |
+| PostgreSQL database integration tests                 | Pass — 4/4, none skipped           |
+| PostgreSQL API integration tests                      | Pass — 11/11, none skipped         |
+| `pnpm build`                                          | Pass — 16 Turbo build tasks        |
+| `docker compose config --quiet`                       | Pass                               |
+| Bot image `collage-bot:telegram-test`                 | Pass — production runtime target   |
+| Real Telegram webhook/group/pin/notification delivery | Not run — needs operator bot token |
+
+### Remaining deployment questions/requirements
+
+- Configure the production bot and Mini App short name in BotFather, supply a
+  public HTTPS webhook, and grant the bot group-admin `Pin messages` rights.
+- Upstream worker processors must enqueue the validated notification view
+  models with unique delivery UUIDs. This milestone implements the complete bot
+  consumer but does not implement unrelated financial event processors.
+- Telegram cannot atomically commit an external `sendMessage` with the Redis
+  completion marker. A crash in that narrow interval can cause a replay; the
+  implementation documents this instead of claiming provider-level
+  exactly-once delivery.

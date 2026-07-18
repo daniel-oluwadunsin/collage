@@ -5,10 +5,30 @@ RUN corepack enable && corepack prepare pnpm@11.14.0 --activate
 WORKDIR /workspace
 
 FROM base AS dependencies
-COPY . .
-RUN pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/bot/package.json apps/bot/package.json
+COPY apps/mini-app/package.json apps/mini-app/package.json
+COPY apps/worker/package.json apps/worker/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/database/package.json packages/database/package.json
+COPY packages/domain/package.json packages/domain/package.json
+COPY packages/eslint-config/package.json packages/eslint-config/package.json
+COPY packages/logger/package.json packages/logger/package.json
+COPY packages/monnify/package.json packages/monnify/package.json
+COPY packages/queue/package.json packages/queue/package.json
+COPY packages/security/package.json packages/security/package.json
+COPY packages/smsgate/package.json packages/smsgate/package.json
+COPY packages/telegram/package.json packages/telegram/package.json
+COPY packages/testing/package.json packages/testing/package.json
+COPY packages/typescript-config/package.json packages/typescript-config/package.json
+COPY packages/ui/package.json packages/ui/package.json
+RUN --mount=type=cache,id=collage-pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile
 
 FROM dependencies AS builder
+COPY . .
 RUN pnpm --filter @collage/bot... build
 RUN pnpm --filter @collage/bot deploy --prod /release
 

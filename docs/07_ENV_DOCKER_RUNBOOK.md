@@ -132,11 +132,29 @@ TELEGRAM_BOT_USERNAME=
 TELEGRAM_MINI_APP_SHORT_NAME=
 TELEGRAM_WEBHOOK_SECRET=
 TELEGRAM_WEBHOOK_PUBLIC_URL=https://bot.example.ng/telegram/webhook
+BOT_INTERNAL_REQUEST_TIMEOUT_MS=5000
+TELEGRAM_NOTIFICATION_CONCURRENCY=10
+TELEGRAM_RATE_LIMIT_MAX_RETRIES=2
 
 INTERNAL_API_URL=http://api:4000
 INTERNAL_SERVICE_TOKEN=
 REDIS_URL=redis://redis:6379
 ```
+
+BotFather/deployment setup:
+
+1. Configure the Mini App short name used by
+   `TELEGRAM_MINI_APP_SHORT_NAME`.
+2. Add the bot to the group, promote it to administrator, and enable
+   **Pin messages**. Collage reports actionable guidance when this permission
+   is absent.
+3. Keep BotFather privacy mode enabled; Collage reacts to its commands,
+   explicit `@bot` mentions, and Telegram service/member updates.
+4. Expose `TELEGRAM_WEBHOOK_PUBLIC_URL` over public HTTPS. Startup registers
+   that URL with the configured secret and exactly `message`,
+   `my_chat_member`, and `chat_member` allowed updates.
+5. Use a random 32–256 character `TELEGRAM_WEBHOOK_SECRET` containing only
+   letters, digits, underscore, or hyphen. Do not reuse the bot token.
 
 ### 2.4 Worker
 

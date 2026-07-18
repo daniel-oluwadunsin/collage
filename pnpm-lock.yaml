@@ -133,12 +133,24 @@ importers:
       '@collage/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@collage/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
+      '@collage/security':
+        specifier: workspace:*
+        version: link:../../packages/security
+      '@collage/telegram':
+        specifier: workspace:*
+        version: link:../../packages/telegram
       express:
         specifier: 5.2.1
         version: 5.2.1
       grammy:
         specifier: 1.45.1
         version: 1.45.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@collage/eslint-config':
         specifier: workspace:*

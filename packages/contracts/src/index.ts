@@ -8,6 +8,44 @@ export const healthResponseSchema = z.object({
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+export const telegramLaunchButtonSchema = z.object({
+  label: z.string().min(1).max(64),
+  startAppToken: z.string().min(20).max(512),
+});
+
+export const telegramUrlButtonSchema = z.object({
+  label: z.string().min(1).max(64),
+  url: z.url(),
+});
+
+export const telegramButtonSchema = z.union([
+  telegramLaunchButtonSchema,
+  telegramUrlButtonSchema,
+]);
+
+export const telegramStatusCardSchema = z.object({
+  state: z.enum([
+    "EMPTY",
+    "DRAFT",
+    "REGISTRATION_OPEN",
+    "STARTING",
+    "ACTIVE",
+    "BLOCKED",
+    "PAYOUT_PROCESSING",
+    "COMPLETED",
+    "SUSPENDED",
+    "CANCELLED",
+  ]),
+  text: z.string().min(1).max(4_096),
+  parseMode: z.literal("HTML"),
+  buttons: z.array(telegramButtonSchema).max(8),
+  pin: z.boolean(),
+  replaceMessageId: z.string().regex(/^\d+$/u).nullable(),
+});
+
+export type TelegramButton = z.infer<typeof telegramButtonSchema>;
+export type TelegramStatusCard = z.infer<typeof telegramStatusCardSchema>;
+
 export type JsonPrimitive = boolean | null | number | string;
 export type JsonValue =
   JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };

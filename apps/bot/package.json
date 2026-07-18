@@ -17,8 +17,12 @@
     "@collage/config": "workspace:*",
     "@collage/contracts": "workspace:*",
     "@collage/logger": "workspace:*",
+    "@collage/queue": "workspace:*",
+    "@collage/security": "workspace:*",
+    "@collage/telegram": "workspace:*",
     "express": "5.2.1",
-    "grammy": "1.45.1"
+    "grammy": "1.45.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@collage/eslint-config": "workspace:*",

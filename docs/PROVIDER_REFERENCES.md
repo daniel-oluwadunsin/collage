@@ -13,6 +13,30 @@ Consulted on: 2026-07-18
   compare the SHA-256 HMAC in constant time, and independently enforce
   `auth_date` freshness. No Telegram network call was made.
 
+Re-consulted on 2026-07-18 before implementing the Telegram bot service:
+
+- [Telegram Bot API — Updates and `setWebhook`](https://core.telegram.org/bots/api#getting-updates) —
+  webhook retry behavior, the exact
+  `X-Telegram-Bot-Api-Secret-Token` header, secret-token character/length
+  constraints, and explicit `allowed_updates`. `chat_member` is requested
+  explicitly because it is excluded from the default update set.
+- [Telegram Bot API — `ChatMemberUpdated` and `getChatMember`](https://core.telegram.org/bots/api#chatmemberupdated) —
+  bot/member lifecycle fields and the requirement that the bot be an
+  administrator for reliable membership lookups and `chat_member` updates.
+- [Telegram Bot API — `pinChatMessage`](https://core.telegram.org/bots/api#pinchatmessage) —
+  administrator and `can_pin_messages` requirements.
+- [Telegram Bot API — `ResponseParameters`](https://core.telegram.org/bots/api#responseparameters) —
+  bounded flood-control retry using Telegram's `retry_after` value.
+- [Telegram Bot Features — Privacy Mode](https://core.telegram.org/bots/features#privacy-mode) —
+  commands addressed to the bot, replies, service messages, and the
+  administrator/privacy-mode visibility model.
+- [Telegram Mini Apps — Direct Link Mini Apps](https://core.telegram.org/bots/webapps#direct-link-mini-apps) —
+  `https://t.me/<bot>/<short-name>?startapp=<opaque-token>&mode=compact`,
+  chat context, and compact/full-height behavior.
+
+The implementation uses grammY's Express webhook adapter but treats the
+official Telegram Bot API pages above as the provider source of truth.
+
 ## Monnify
 
 Consulted on 2026-07-18 before implementing the adapter:

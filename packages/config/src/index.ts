@@ -182,6 +182,35 @@ export const botEnvironmentSchema = serviceEnvironmentSchema
     BOT_PORT: portSchema.default(4001),
     INTERNAL_API_URL: urlSchema,
     TELEGRAM_BOT_TOKEN: z.string().min(10),
+    TELEGRAM_BOT_USERNAME: z.string().regex(/^@?[A-Za-z0-9_]{5,64}$/u),
+    TELEGRAM_MINI_APP_SHORT_NAME: z.string().regex(/^[A-Za-z0-9_]{1,64}$/u),
+    TELEGRAM_WEBHOOK_SECRET: z
+      .string()
+      .min(32)
+      .max(256)
+      .regex(/^[A-Za-z0-9_-]+$/u),
+    TELEGRAM_WEBHOOK_PUBLIC_URL: urlSchema.refine(
+      (value) => new URL(value).protocol === "https:",
+      "Telegram webhook URL must use HTTPS",
+    ),
+    BOT_INTERNAL_REQUEST_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(30_000)
+      .default(5_000),
+    TELEGRAM_NOTIFICATION_CONCURRENCY: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .default(10),
+    TELEGRAM_RATE_LIMIT_MAX_RETRIES: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(5)
+      .default(2),
   })
   .and(persistenceEnvironmentSchema.pick({ REDIS_URL: true }))
   .and(cryptographyEnvironmentSchema.pick({ INTERNAL_SERVICE_TOKEN: true }))

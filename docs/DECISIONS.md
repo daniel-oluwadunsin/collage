@@ -228,3 +228,33 @@
   as unsuitable for sensitive data, so production configuration rejects the
   public-cloud host and non-HTTPS endpoints; production should use a private
   SMSGate server.
+
+## D-025 — The Telegram bot consumes presentation contracts, not financial data
+
+- Date: 2026-07-18
+- Decision: `apps/bot` may call only the replay-resistant internal Telegram
+  API and consume validated `telegram-notifications` jobs. Status, rules,
+  registered-member leave notices, and notification text arrive as approved
+  HTML presentation models. The bot owns Telegram permission checks, escaping
+  of Telegram-originated names, direct-link materialization, delivery, and pin
+  maintenance; it does not import the database, Monnify, or SMSGate packages.
+- Reason: financial facts and authorization policy belong to the API. Keeping
+  them out of the bot prevents stale Telegram messages or compromised bot
+  credentials from becoming a money-movement authority.
+
+## D-026 — Telegram delivery is bounded and deduplicated
+
+- Date: 2026-07-18
+- Decision: startup registers exactly `message`, `my_chat_member`, and
+  `chat_member`; webhook requests require Telegram's secret-token header.
+  Bot API flood responses use the documented `retry_after` with a bounded retry
+  count and maximum inline delay. Notification jobs claim their delivery UUID
+  atomically in Redis, release the claim after a failed call, and retain a
+  completed marker for 90 days. BullMQ remains responsible for bounded
+  exponential retry.
+- Reason: Telegram retries unsuccessful webhooks and does not offer an
+  idempotency key for `sendMessage`. A durable Redis claim prevents concurrent
+  and routine replay duplicates without pretending that an external send and a
+  local acknowledgement can be one atomic transaction. A process loss after
+  Telegram accepts a send but before the completed marker is written remains an
+  unavoidable ambiguous edge and must not be described as exactly-once.

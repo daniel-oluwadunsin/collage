@@ -1,0 +1,11 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Milestone 1 intentionally defines no business models. Financial schema,
+// constraints, migrations, and generated client integration begin in Milestone 2.

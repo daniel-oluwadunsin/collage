@@ -1,0 +1,26 @@
+FROM node:24.18.0-alpine AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@11.14.0 --activate
+WORKDIR /workspace
+
+FROM base AS dependencies
+COPY . .
+RUN pnpm install --frozen-lockfile
+
+FROM dependencies AS builder
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @collage/mini-app... build
+
+FROM node:24.18.0-alpine AS runtime
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+WORKDIR /app
+RUN addgroup --system --gid 1001 collage && adduser --system --uid 1001 --ingroup collage collage
+COPY --from=builder --chown=collage:collage /workspace/apps/mini-app/.next/standalone ./
+COPY --from=builder --chown=collage:collage /workspace/apps/mini-app/.next/static ./apps/mini-app/.next/static
+USER collage
+EXPOSE 3000
+CMD ["node", "apps/mini-app/server.js"]

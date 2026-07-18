@@ -1,159 +1,98 @@
-# Turborepo starter
+# Collage
 
-This Turborepo starter is maintained by the Turborepo core team.
+Telegram-native Ajo/group-contribution platform. Milestone 1 establishes the
+design system, monorepo boundaries, health services, and container topology
+only. No registration, payment, ledger, cycle, payout, webhook, or bot business
+behavior is active.
 
-## Using this example
+## Architecture
 
-Run the following command:
+```text
+apps/
+  api/       Express public/internal API boundary
+  bot/       grammY/Telegram delivery boundary
+  worker/    BullMQ durable-work boundary
+  mini-app/  Next.js App Router Telegram Mini App
 
-```sh
-npx create-turbo@latest
+packages/
+  config/ contracts/ database/ domain/ logger/ monnify/ queue/
+  security/ telegram/ testing/ ui/ eslint-config/ typescript-config/
 ```
 
-## What's inside?
+`domain` is infrastructure-free. The bot cannot access the database or Monnify.
+The browser imports browser-safe contracts and UI only. ESLint enforces these
+boundaries.
 
-This Turborepo includes the following packages/apps:
+## Local setup
 
-### Apps and Packages
+Requirements: Node `24.18.0`, Corepack, pnpm `11.14.0`, and Docker Compose.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```bash
+corepack enable
+corepack prepare pnpm@11.14.0 --activate
+pnpm install --frozen-lockfile
+cp .env.example .env
+pnpm dev
 ```
 
-Without global `turbo`, use your package manager:
+Local ports:
 
-```sh
-cd my-turborepo
-npx turbo build
-pnpm dlx turbo build
-pnpm exec turbo build
+- Mini App: `http://localhost:3000`
+- API health: `http://localhost:4000/health/ready`
+- Bot health: `http://localhost:4001/health/ready`
+- Worker health: `http://localhost:4002/health/ready`
+
+## Quality commands
+
+```bash
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:integration
+pnpm build
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Docker
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+cp .env.example .env
+docker compose config
+docker compose build api bot worker mini-app
+docker compose up
+docker compose ps
+docker compose down
 ```
 
-Without global `turbo`:
+The Compose topology includes PostgreSQL, Redis, a one-shot Prisma migration
+service, and all four applications. The Milestone 1 Prisma schema is
+intentionally empty, so the migration service performs no financial schema
+change.
 
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+## Telegram setup (future operational milestone)
 
-### Develop
+1. Create a bot in BotFather.
+2. Configure a Mini App short name and HTTPS URL.
+3. Add the bot to a test group and grant pin-message permission.
+4. Configure the bot webhook URL and secret.
+5. Populate the Telegram placeholders in `.env`.
 
-To develop all apps and packages, run the following command:
+Milestone 1 does not set a Telegram webhook or process updates.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## Monnify setup (future provider milestone)
 
-```sh
-cd my-turborepo
-turbo dev
-```
+Create sandbox credentials, then confirm direct-debit, tokenization,
+disbursement, wallet, webhook, static-egress, identity-verification, and MFA
+availability with Monnify. Do not enable any `MONNIFY_*_ENABLED` flag until the
+relevant adapter and official-document contract tests exist.
 
-Without global `turbo`, use your package manager:
+Milestone 1 makes no Monnify call and exposes no webhook.
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
-```
+## Documentation
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- Product and architecture: `docs/01_PRD.md`, `docs/02_ARCHITECTURE.md`
+- Canonical UI specification: `docs/DESIGN.md`
+- Security/provider behavior: `docs/04_MONNIFY_INTEGRATION.md`,
+  `docs/05_SECURITY_AND_RISK.md`
+- Status and decisions: `docs/IMPLEMENTATION_STATUS.md`, `docs/DECISIONS.md`
+- References: `docs/PROVIDER_REFERENCES.md`

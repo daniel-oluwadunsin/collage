@@ -1,3 +1,25 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+injectWorkspacePackages: true
+
+allowBuilds:
+  "@prisma/engines": true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  sharp: true
+
+catalog:
+  "@types/express": "5.0.3"
+  "@types/node": "24.10.1"
+  "eslint": "9.39.1"
+  "typescript": "5.9.3"
+  "zod": "4.4.3"
+
+minimumReleaseAgeExclude:
+  - bullmq@5.80.8
+  - grammy@1.45.1
+  - lucide-react@1.25.0
+  - react-hook-form@7.82.0

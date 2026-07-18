@@ -168,3 +168,5 @@ At the end, provide:
 - known limitations;
 - open compliance/provider questions;
 - production-readiness checklist.
+
+ALL UNIT TESTS SHOULD BE DELETED AFTER VERIFIED

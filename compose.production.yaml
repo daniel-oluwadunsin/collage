@@ -1,0 +1,24 @@
+name: collage-production
+
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  api:
+    ports: !reset []
+    restart: unless-stopped
+
+  bot:
+    ports: !reset []
+    restart: unless-stopped
+
+  worker:
+    ports: !reset []
+    restart: unless-stopped
+
+  mini-app:
+    ports: !reset []
+    restart: unless-stopped

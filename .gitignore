@@ -26,6 +26,7 @@ coverage
 out/
 build
 dist
+*.tsbuildinfo
 
 
 # Debug
@@ -36,7 +37,12 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+.env.*.local
 
+# Prisma generated client
+packages/database/generated/
+
+# Docker/local data
+.docker/
 
 prompts
-docs

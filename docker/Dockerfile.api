@@ -1,0 +1,22 @@
+FROM node:24.18.0-alpine AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@11.14.0 --activate
+WORKDIR /workspace
+
+FROM base AS dependencies
+COPY . .
+RUN pnpm install --frozen-lockfile
+
+FROM dependencies AS builder
+RUN pnpm --filter @collage/api... build
+RUN pnpm --filter @collage/api deploy --prod /release
+
+FROM node:24.18.0-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+RUN addgroup --system --gid 1001 collage && adduser --system --uid 1001 --ingroup collage collage
+COPY --from=builder --chown=collage:collage /release ./
+USER collage
+EXPOSE 4000
+CMD ["node", "dist/index.js"]

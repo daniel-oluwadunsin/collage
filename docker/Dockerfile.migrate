@@ -1,0 +1,13 @@
+FROM node:24.18.0-alpine AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@11.14.0 --activate
+WORKDIR /workspace
+
+FROM base AS dependencies
+COPY . .
+RUN pnpm install --frozen-lockfile
+
+FROM dependencies AS migration
+ENV NODE_ENV=production
+CMD ["pnpm", "--filter", "@collage/database", "prisma:migrate:deploy"]

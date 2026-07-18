@@ -1,27 +1,34 @@
 # Collage
 
-Telegram-native Ajo/group-contribution platform. Milestone 1 establishes the
-design system, monorepo boundaries, health services, and container topology
-only. No registration, payment, ledger, cycle, payout, webhook, or bot business
-behavior is active.
+Collage is a Telegram-native Ajo/group-contribution platform. A group creates a
+strict contribution schedule, members register through a Telegram Mini App,
+collections are verified through Monnify, and the scheduled recipient is paid
+only after every contribution and the Collage ledger reconcile.
 
 ## Architecture
 
 ```text
-apps/
-  api/       Express public/internal API boundary
-  bot/       grammY/Telegram delivery boundary
-  worker/    BullMQ durable-work boundary
-  mini-app/  Next.js App Router Telegram Mini App
+Telegram group
+  └─ bot (grammY delivery/pinned status)
+       └─ internal authenticated API
 
-packages/
-  config/ contracts/ database/ domain/ logger/ monnify/ queue/
-  security/ telegram/ testing/ ui/ eslint-config/ typescript-config/
+Mini App (Next.js)
+  └─ public Express API
+       ├─ PostgreSQL / Prisma source of truth
+       ├─ transactional outbox
+       ├─ Monnify adapter
+       └─ SMSGate OTP adapter
+
+Worker (BullMQ)
+  ├─ lifecycle and collection jobs
+  ├─ reconciliation and payout jobs
+  └─ Telegram notification jobs → bot
 ```
 
-`domain` is infrastructure-free. The bot cannot access the database or Monnify.
-The browser imports browser-safe contracts and UI only. ESLint enforces these
-boundaries.
+Applications: `api`, `bot`, `worker`, and `mini-app`. PostgreSQL is the final
+correctness boundary; Redis accelerates queues and delivery deduplication but
+does not own financial state. Money is integer kobo (`BigInt`). Ledger and audit
+history are append-only.
 
 ## Local setup
 
@@ -32,67 +39,66 @@ corepack enable
 corepack prepare pnpm@11.14.0 --activate
 pnpm install --frozen-lockfile
 cp .env.example .env
+docker compose up -d postgres redis
+pnpm db:generate
+pnpm db:migrate:deploy
+pnpm db:seed
 pnpm dev
 ```
 
-Local ports:
+Local endpoints:
 
 - Mini App: `http://localhost:3000`
-- API health: `http://localhost:4000/health/ready`
+- API: `http://localhost:4000`
+- API Swagger: `http://localhost:4000/docs`
 - Bot health: `http://localhost:4001/health/ready`
-- Worker health: `http://localhost:4002/health/ready`
+- Worker health/metrics: `http://localhost:4002/health/ready` and `/metrics`
 
-## Quality commands
+## Verification
 
 ```bash
 pnpm format:check
 pnpm lint
 pnpm typecheck
-pnpm test
-pnpm test:integration
 pnpm build
+pnpm audit --prod
+docker compose config --quiet
 ```
+
+The unit, PostgreSQL/Redis integration, security, provider-fixture, and
+Playwright suites were executed before their files were removed at the product
+owner's request. Exact historical evidence is in
+`docs/IMPLEMENTATION_STATUS.md`.
 
 ## Docker
 
 ```bash
 cp .env.example .env
-docker compose config
-docker compose build api bot worker mini-app
-docker compose up
+docker compose up --build
 docker compose ps
+docker compose logs -f api bot worker
 docker compose down
 ```
 
-The Compose topology includes PostgreSQL, Redis, a one-shot Prisma migration
-service, and all four applications. The Milestone 1 Prisma schema is
-intentionally empty, so the migration service performs no financial schema
-change.
+Production overlay:
 
-## Telegram setup (future operational milestone)
+```bash
+docker compose -f compose.yaml -f compose.production.yaml up -d --build
+```
 
-1. Create a bot in BotFather.
-2. Configure a Mini App short name and HTTPS URL.
-3. Add the bot to a test group and grant pin-message permission.
-4. Configure the bot webhook URL and secret.
-5. Populate the Telegram placeholders in `.env`.
-
-Milestone 1 does not set a Telegram webhook or process updates.
-
-## Monnify setup (future provider milestone)
-
-Create sandbox credentials, then confirm direct-debit, tokenization,
-disbursement, wallet, webhook, static-egress, identity-verification, and MFA
-availability with Monnify. Do not enable any `MONNIFY_*_ENABLED` flag until the
-relevant adapter and official-document contract tests exist.
-
-Milestone 1 makes no Monnify call and exposes no webhook.
+Do not enable `PROVIDER_CALLS_ENABLED=true` until Monnify features, payout
+egress/IP policy, wallet funding, webhook signature handling, identity/KYC,
+MFA operations, and compliance gates are approved.
 
 ## Documentation
 
-- Product and architecture: `docs/01_PRD.md`, `docs/02_ARCHITECTURE.md`
-- Canonical UI specification: `docs/DESIGN.md`
-- Security/provider behavior: `docs/04_MONNIFY_INTEGRATION.md`,
-  `docs/05_SECURITY_AND_RISK.md`
-- Status and decisions: `docs/IMPLEMENTATION_STATUS.md`, `docs/DECISIONS.md`
-- References: `docs/PROVIDER_REFERENCES.md`
+- [Setup](docs/SETUP.md)
+- [Telegram setup](docs/TELEGRAM_SETUP.md)
+- [Monnify setup](docs/MONNIFY_SETUP.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Operations runbook](docs/OPERATIONS_RUNBOOK.md)
+- [Demo script](docs/DEMO_SCRIPT.md)
+- [Known limitations](docs/KNOWN_LIMITATIONS.md)
+- [Design system](docs/DESIGN.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+- [Provider references](docs/PROVIDER_REFERENCES.md)

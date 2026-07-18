@@ -29,7 +29,7 @@ import {
   type ResolvedAccount,
   type Status,
 } from "../lib/schemas";
-import { useApi, useTelegram } from "./providers";
+import { useApi } from "./providers";
 import {
   AsyncButton,
   Button,
@@ -326,7 +326,6 @@ function ManualPaymentFlow({
   readonly onClose: () => void;
 }): JSX.Element {
   const { api } = useApi();
-  const telegram = useTelegram();
   const [attemptId, setAttemptId] = useState<string | null>(() =>
     window.sessionStorage.getItem("collage-manual-attempt-id"),
   );
@@ -348,7 +347,7 @@ function ManualPaymentFlow({
         "collage-manual-attempt-id",
         result.attemptId,
       );
-      if (result.checkoutUrl !== null && !telegram.isTestBridge)
+      if (result.checkoutUrl !== null)
         window.location.assign(result.checkoutUrl);
     },
   });
@@ -369,9 +368,7 @@ function ManualPaymentFlow({
         terminalPaymentStates.has(query.state.data.state)) ||
       query.state.dataUpdateCount >= maxAutomaticProviderPolls
         ? false
-        : telegram.isTestBridge
-          ? 300
-          : 4_000,
+        : 4_000,
   });
   if (cycle === null)
     return (
@@ -616,7 +613,6 @@ function ReplacePaymentMethodFlow({
   readonly onClose: () => void;
 }): JSX.Element {
   const { api } = useApi();
-  const telegram = useTelegram();
   const [pending, setPending] = useState(false);
   const form = useForm<EmailInput>({
     resolver: zodResolver(emailSchema),
@@ -635,11 +631,7 @@ function ReplacePaymentMethodFlow({
         result.authorizationId,
       );
       setPending(true);
-      if (
-        result.checkoutUrl !== null &&
-        result.checkoutUrl !== undefined &&
-        !telegram.isTestBridge
-      )
+      if (result.checkoutUrl !== null && result.checkoutUrl !== undefined)
         window.location.assign(result.checkoutUrl);
     },
   });

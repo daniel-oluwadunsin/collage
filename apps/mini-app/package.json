@@ -7,15 +7,13 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "lint": "eslint app components lib e2e next.config.ts playwright.config.ts --max-warnings 0",
-    "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --import tsx --test lib/**/*.test.ts",
-    "test:integration": "node --import tsx --test lib/**/*.test.ts",
-    "test:e2e": "playwright test"
+    "lint": "eslint app components lib next.config.ts --max-warnings 0",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@collage/contracts": "workspace:*",
     "@collage/ui": "workspace:*",
+    "@fontsource-variable/space-grotesk": "5.2.10",
     "@hookform/resolvers": "5.2.2",
     "@tanstack/react-query": "5.101.2",
     "@telegram-apps/sdk-react": "3.3.9",
@@ -31,14 +29,12 @@
   "devDependencies": {
     "@collage/eslint-config": "workspace:*",
     "@collage/typescript-config": "workspace:*",
-    "@playwright/test": "1.55.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "catalog:",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "catalog:",
     "tailwindcss": "4.3.3",
-    "tsx": "4.21.0",
     "typescript": "catalog:"
   }
 }

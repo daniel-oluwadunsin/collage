@@ -451,8 +451,9 @@ validation remain deployment gates.
 - [x] Semantic headings/definition lists, labelled fields, visible focus,
       keyboard controls, 48px actions, reduced-motion behavior, and no
       color-only statuses.
-- [x] Compile-time-gated Playwright Telegram bridge with compact and fullscreen
-      projects and no Telegram or Monnify external calls.
+- [x] Compact and fullscreen Playwright fixtures were verified before the
+      product-directed removal of all repository test files and test-only
+      runtime bridges.
 - [x] API compatibility fixes for staged registration, group-member Collage
       reads, and safe external Telegram chat context during creation bootstrap.
 
@@ -481,10 +482,59 @@ validation remain deployment gates.
 - Real Telegram Android, iOS, and Desktop clients must verify host theme
   changes, safe/content-safe-area CSS values, keyboard behavior, provider
   return navigation, and user-gesture fullscreen behavior.
-- Production must build with `NEXT_PUBLIC_ENABLE_TEST_BRIDGE=false`.
 - Monnify card tokenization/direct debit/disbursement and the selected identity
   verification path remain provider/compliance gates; the UI cannot make these
   production-ready by itself.
 - Provider return URLs must be configured to reopen the correct opaque Mini App
   action; redirects remain non-authoritative and are followed by server
   verification.
+
+## Milestones 7 and 8 — integration, hardening, Docker, and handoff
+
+Status: implemented and audited on 2026-07-18; live-provider, compliance, and
+real-device gates remain open and are listed in `docs/KNOWN_LIMITATIONS.md`.
+
+### Delivered
+
+- [x] Verified the exact-once start, registration notification, payment,
+      strict-cycle, reminder, payout, retry, leave-obligation, replacement,
+      reconciliation, and pinned-status vertical slices through the database,
+      API, bot, worker, Redis, and PostgreSQL integration suites.
+- [x] Verified forged/stale Telegram data, replay defenses, webhook
+      deduplication, amount/status verification, ambiguous provider outcomes,
+      payout deduplication, sensitive-data masking, and object authorization.
+- [x] Reviewed Prisma uniqueness/indexing plus raw financial check constraints,
+      immutable-ledger triggers, and deferred balanced-ledger enforcement.
+- [x] Added provider-reconciliation mismatch handling, Prometheus worker
+      metrics, and safe operational alert guidance.
+- [x] Reworked the Mini App into the approved flat neo-brutalist visual system:
+      Space Grotesk, no gradients, hard shadows, square structure, fixed
+      Collage Yellow `#FFD85C` and Blue `#0357EE`, light/dark themes, and
+      explicit loading/error/provider-pending states.
+- [x] Finished non-root multi-stage images, Compose health dependencies,
+      one-shot migrations, production overlay, environment examples, setup,
+      Telegram, Monnify, deployment, operations, demo, and limitations docs.
+- [x] Remediated the production dependency audit from 15 advisories to zero
+      known production vulnerabilities.
+- [x] Verified all tests before removing every repository test file, generated
+      test report, Playwright configuration, fixture bridge, and test-only
+      package as explicitly required by the product owner.
+
+### Verification evidence before test-file removal
+
+| Evidence                      | Result                                  |
+| ----------------------------- | --------------------------------------- |
+| Full repository unit suite    | Pass — 27 Turbo tasks                   |
+| Database integration          | Pass — 4/4, no skips                    |
+| API integration/security      | Pass — 12/12, no skips                  |
+| Bot/Redis integration         | Pass — 11/11, no skips                  |
+| Worker integration/policies   | Pass — 10/10, no skips                  |
+| Mini App Playwright           | Pass — 20/20 compact/fullscreen         |
+| Responsive browser inspection | Pass — 390×760 and 900×900, no overflow |
+| Gradient scan                 | Pass — no CSS gradients                 |
+| `pnpm audit --prod`           | Pass — zero known vulnerabilities       |
+
+Post-removal verification is limited to formatting, linting, typechecking,
+builds, migrations, dependency audit, Compose validation, and smoke checks by
+design. Test evidence above describes the final implementation immediately
+before the authorized deletion, not a suite that remains in the repository.

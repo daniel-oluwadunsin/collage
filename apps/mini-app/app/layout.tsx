@@ -1,4 +1,5 @@
 import "@collage/ui/styles.css";
+import "@fontsource-variable/space-grotesk";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";

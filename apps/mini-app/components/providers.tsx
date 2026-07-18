@@ -35,7 +35,6 @@ import {
 } from "react";
 
 import { HttpApiTransport, type ApiTransport } from "../lib/api";
-import { TestBridgeTransport } from "../lib/test-bridge";
 
 export type ThemeChoice = "dark" | "light" | "system" | "telegram";
 
@@ -56,7 +55,6 @@ interface TelegramContextValue {
   readonly booted: boolean;
   readonly initData: string;
   readonly launchToken?: string | undefined;
-  readonly isTestBridge: boolean;
   readonly requestFullscreen: () => void;
 }
 
@@ -64,8 +62,6 @@ const TelegramContext = createContext<TelegramContextValue | null>(null);
 
 const getTelegramWebApp = (): TelegramWebApp | undefined =>
   (window as TelegramWindow).Telegram?.WebApp;
-
-const testBridgeEnabled = process.env.NEXT_PUBLIC_ENABLE_TEST_BRIDGE === "true";
 
 export function TelegramAppProvider({
   children,
@@ -75,27 +71,9 @@ export function TelegramAppProvider({
   const [booted, setBooted] = useState(false);
   const [initData, setInitData] = useState("");
   const [launchToken, setLaunchToken] = useState<string>();
-  const [isTestBridge, setIsTestBridge] = useState(false);
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
-    const bridgeRequested = testBridgeEnabled && search.get("bridge") === "1";
-    setIsTestBridge(bridgeRequested);
-    if (bridgeRequested) {
-      setInitData("test-bridge-init-data");
-      setLaunchToken(search.get("startapp") ?? "test-launch-token-1234567890");
-      document.documentElement.style.setProperty(
-        "--tg-safe-area-inset-top",
-        "0px",
-      );
-      document.documentElement.style.setProperty(
-        "--tg-content-safe-area-inset-bottom",
-        "0px",
-      );
-      setBooted(true);
-      return;
-    }
-
     try {
       init();
       mountThemeParamsSync.ifAvailable();
@@ -134,10 +112,9 @@ export function TelegramAppProvider({
       booted,
       initData,
       launchToken,
-      isTestBridge,
       requestFullscreen,
     }),
-    [booted, initData, isTestBridge, launchToken, requestFullscreen],
+    [booted, initData, launchToken, requestFullscreen],
   );
   return (
     <TelegramContext.Provider value={value}>
@@ -153,9 +130,8 @@ export const useTelegram = (): TelegramContextValue => {
 };
 
 export const useTelegramBack = (onBack: () => void, visible: boolean): void => {
-  const { isTestBridge } = useTelegram();
   useEffect(() => {
-    if (isTestBridge || !visible) return;
+    if (!visible) return;
     mountBackButton.ifAvailable();
     showBackButton.ifAvailable();
     onBackButtonClick.ifAvailable(onBack);
@@ -163,7 +139,7 @@ export const useTelegramBack = (onBack: () => void, visible: boolean): void => {
       offBackButtonClick.ifAvailable(onBack);
       hideBackButton.ifAvailable();
     };
-  }, [isTestBridge, onBack, visible]);
+  }, [onBack, visible]);
 };
 
 interface ThemeContextValue {
@@ -238,19 +214,10 @@ export function ApiProvider({
 }: {
   readonly children: ReactNode;
 }): JSX.Element {
-  const telegram = useTelegram();
   const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const scenario =
-    typeof window === "undefined"
-      ? "default"
-      : (new URLSearchParams(window.location.search).get("scenario") ??
-        "default");
   const api = useMemo<ApiTransport>(
-    () =>
-      telegram.isTestBridge
-        ? new TestBridgeTransport(scenario)
-        : new HttpApiTransport(() => sessionToken),
-    [scenario, sessionToken, telegram.isTestBridge],
+    () => new HttpApiTransport(() => sessionToken),
+    [sessionToken],
   );
   return (
     <ApiContext.Provider value={{ api, setSessionToken }}>

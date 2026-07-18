@@ -192,13 +192,11 @@ NEXT_PUBLIC_API_URL=https://api.example.ng/v1
 NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=
 NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=
 NEXT_PUBLIC_APP_ENV=development
-NEXT_PUBLIC_ENABLE_TEST_BRIDGE=false
 ```
 
 No Monnify secret, bot token, encryption key, internal service token, or database URL may be present.
-These values are compiled into the Next.js browser bundle. Supply them as
-Mini App image build arguments; `NEXT_PUBLIC_ENABLE_TEST_BRIDGE` must remain
-`false` for every deployable image.
+These values are compiled into the Next.js browser bundle. Supply them as Mini
+App image build arguments. Test-only runtime bridges are not shipped.
 
 ### 2.6 Optional observability
 

@@ -160,3 +160,20 @@ with the same caller-supplied message ID.
 - [Next.js App Router](https://nextjs.org/docs/app) and
   [Next.js deployment](https://nextjs.org/docs/app/getting-started/deploying) —
   standalone output and App Router health route foundation.
+
+## Final integration audit
+
+Reconsulted on 2026-07-18 during the final provider-state and reconciliation
+audit:
+
+- [Retry & Failure Handling](https://developers.monnify.com/docs/collections/recurring-payments/retry-failure-handling)
+  for bounded debit retries and unresolved outcomes.
+- [Webhooks](https://developers.monnify.com/docs/webhooks/overview) and
+  [Webhook Event Types](https://developers.monnify.com/docs/webhooks/event-types)
+  for signature verification, raw payload handling, replay, and event mapping.
+- [Single Transfers](https://developers.monnify.com/docs/disbursements/single-transfers)
+  for asynchronous transfer states, MFA, polling, and live static-egress/IP
+  allowlisting requirements.
+- [Telegram Mini Apps](https://core.telegram.org/bots/webapps) and
+  [Telegram Bot API](https://core.telegram.org/bots/api) for init-data
+  validation, webhook secret tokens, message updates, and pinning behavior.

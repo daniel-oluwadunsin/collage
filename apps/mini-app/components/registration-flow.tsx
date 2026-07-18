@@ -35,7 +35,7 @@ import {
   type Registration,
   type ResolvedAccount,
 } from "../lib/schemas";
-import { useApi, useTelegram, useTelegramBack } from "./providers";
+import { useApi, useTelegramBack } from "./providers";
 import {
   AsyncButton,
   Button,
@@ -136,7 +136,6 @@ export function RegistrationFlow({
   readonly initialRegistration: Registration;
 }): JSX.Element {
   const { api } = useApi();
-  const telegram = useTelegram();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(() => registrationStep(initialRegistration));
   const [otpRequested, setOtpRequested] = useState(false);
@@ -188,7 +187,7 @@ export function RegistrationFlow({
         return false;
       if (query.state.dataUpdateCount >= maxAutomaticProviderPolls)
         return false;
-      return telegram.isTestBridge ? 300 : 3_000;
+      return 3_000;
     },
   });
   const completionRegistration = useQuery({
@@ -203,9 +202,7 @@ export function RegistrationFlow({
       query.state.data?.state === "REGISTERED" ||
       query.state.dataUpdateCount >= maxAutomaticProviderPolls
         ? false
-        : telegram.isTestBridge
-          ? 300
-          : 3_000,
+        : 3_000,
   });
 
   useEffect(() => {
@@ -395,7 +392,7 @@ export function RegistrationFlow({
         result.authorizationId,
       );
       const redirect = result.checkoutUrl ?? result.authorizationUrl;
-      if (redirect !== null && redirect !== undefined && !telegram.isTestBridge)
+      if (redirect !== null && redirect !== undefined)
         window.location.assign(redirect);
     },
     onError: (cause) => setError(errorMessage(cause)),

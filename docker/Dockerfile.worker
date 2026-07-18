@@ -6,7 +6,11 @@ WORKDIR /workspace
 
 FROM base AS dependencies
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=collage-pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile --filter @collage/worker... \
+    --trust-lockfile --prefer-offline \
+    --network-concurrency=4 --fetch-retries=5 --fetch-timeout=120000
 
 FROM dependencies AS builder
 RUN pnpm --filter @collage/worker... build

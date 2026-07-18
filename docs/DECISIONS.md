@@ -339,6 +339,7 @@
 ## D-034 — The Telegram E2E bridge is compile-time gated
 
 - Date: 2026-07-18
+- Status: superseded by D-038 after verification.
 - Decision: deterministic Telegram/API fixtures are available only when
   `NEXT_PUBLIC_ENABLE_TEST_BRIDGE=true` at build/start time and the URL also
   requests `bridge=1`. Production configuration must leave this false.
@@ -370,3 +371,25 @@
   adds a second mutable network dependency to image builds without changing
   resolution; tarball integrity verification and the frozen lockfile remain
   enforced.
+
+## D-037 — The Mini App uses flat accountable neo-brutalism
+
+- Date: 2026-07-18
+- Decision: the Mini App uses Space Grotesk, square geometry, thick borders,
+  hard offset shadows, and flat semantic color blocks. Gradients are forbidden
+  in decoration, progress, text, skeletons, and generated textures. Collage
+  Yellow `#FFD85C` and Collage Blue `#0357EE` remain unchanged.
+- Reason: this applies the supplied replacement design language while keeping
+  the established brand, Telegram constraints, dark mode, accessible states,
+  and the clarity required for financial outcomes.
+
+## D-038 — Tests are verified and then removed
+
+- Date: 2026-07-18
+- Decision: all unit, integration, Playwright, fixture-bridge, generated-report,
+  and test-package files are deleted only after the full suite and critical
+  integrations pass. The exact evidence is retained in
+  `docs/IMPLEMENTATION_STATUS.md`.
+- Reason: the product owner explicitly required that no test files remain.
+  Preserving evidence while removing executable tests is the narrowest way to
+  follow that direction without falsely claiming unverified behavior.

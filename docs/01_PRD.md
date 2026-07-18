@@ -661,7 +661,9 @@ Suggested account families:
 - Do not send sensitive data to analytics or error monitoring.
 - Use explicit data-retention/deletion policy.
 - Sandbox identity verification must be visibly labeled as mocked.
-- OTP is behind a provider interface; development may use a clearly marked console/test provider.
+- OTP is behind a provider interface implemented by SMSGate. Development may
+  use the Android Local Server or public cloud; production requires a private
+  HTTPS SMSGate server.
 
 ## 19. Auditability
 

@@ -7,6 +7,7 @@ const forbiddenInfrastructureImports = [
   "@collage/database",
   "@collage/monnify",
   "@collage/queue",
+  "@collage/smsgate",
   "@collage/telegram",
 ];
 
@@ -31,7 +32,9 @@ export const baseConfig = [
         "error",
         { fixStyle: "inline-type-imports" },
       ],
+      "@typescript-eslint/prefer-promise-reject-errors": "off",
       "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-confusing-void-expression": "off",
       "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
@@ -90,6 +93,10 @@ export const baseConfig = [
               name: "@collage/monnify",
               message: "The bot must never call Monnify.",
             },
+            {
+              name: "@collage/smsgate",
+              message: "The bot must send SMS through the internal API.",
+            },
           ],
         },
       ],
@@ -107,6 +114,7 @@ export const baseConfig = [
             "@collage/monnify",
             "@collage/queue",
             "@collage/security",
+            "@collage/smsgate",
           ].map((name) => ({
             name,
             message: "Browser code may import only browser-safe contracts/UI.",

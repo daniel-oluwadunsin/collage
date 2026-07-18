@@ -150,3 +150,81 @@
   truncated SHA-256 digest of canonical identity parts and never use `:`.
 - Reason: BullMQ reserves colons in custom IDs, and raw references can leak
   provider or customer identifiers into queue metadata.
+
+## D-018 — Monnify behavior is isolated behind a typed adapter
+
+- Date: 2026-07-18
+- Decision: the API depends on a typed provider port implemented by the
+  Monnify adapter. The adapter owns authentication caching, exact decimal
+  serialization, endpoint paths, response validation, documented status maps,
+  and safe error classification.
+- Reason: provider payloads and statuses must not leak into domain or route
+  code. Unknown statuses remain unknown, and timeout outcomes are never
+  converted to success or blindly retried.
+
+## D-019 — Webhook receipt and processing are separate transactions
+
+- Date: 2026-07-18
+- Decision: production Monnify webhooks require the documented source IP and
+  HMAC-SHA512 over the exact raw bytes. Sandbox accepts an unsigned webhook only
+  when an explicit environment switch is true. Valid receipts are encrypted,
+  deduplicated by raw-body fingerprint, and paired with an outbox event in one
+  serializable transaction before acknowledgement.
+- Reason: request handlers must acknowledge quickly without performing
+  financial work, while the inbox/outbox transaction prevents an accepted
+  webhook from being lost before asynchronous processing.
+
+## D-020 — Current Telegram administration is freshness-bound
+
+- Date: 2026-07-18
+- Decision: administrative API actions require an active Telegram membership
+  with `ADMINISTRATOR` or `CREATOR` role observed within five minutes. A
+  creator ID stored on a Collage is not continuing authorization.
+- Reason: Telegram roles can change after Collage creation. The API must use
+  current synchronized group authority and fail closed when the bot view is
+  stale.
+
+## D-021 — Provider setup responses are durably idempotent
+
+- Date: 2026-07-18
+- Decision: checkout URLs are encrypted at rest against the authorization or
+  payment-attempt context. Repeating a card-setup or manual-checkout
+  idempotency key returns the same safe response without a second Monnify call.
+- Reason: a client retry after a lost response must not initialize another
+  charge. Checkout URLs are operational credentials and cannot be logged or
+  stored in plaintext.
+
+## D-022 — Identity production enablement fails closed
+
+- Date: 2026-07-18
+- Decision: identity remains `IDENTITY_PENDING`; no sandbox NIN response or
+  mock success completes registration.
+- Reason: Monnify documents NIN verification as live-only and merchant
+  enablement is not confirmed. Selecting an identity vendor changes privacy,
+  compliance, and delivery behavior and requires product-owner approval.
+
+## D-023 — Provider references are not globally unique event IDs
+
+- Date: 2026-07-18
+- Decision: retain the Monnify reference on webhook rows for lookup, but dedupe
+  exact deliveries with the provider/environment/fingerprint unique key.
+- Reason: Monnify event envelopes do not document a distinct immutable event ID;
+  the same transaction reference can legitimately appear in later event types.
+  Treating that reference as globally unique could discard a reversal.
+
+## D-024 — SMSGate owns outbound OTP transport
+
+- Date: 2026-07-18
+- Decision: Collage sends registration OTPs through a typed SMSGate adapter
+  using an Android device. JWT is the cloud/private default; the documented
+  Basic-auth `/message` API is used for local-server development. Each OTP
+  challenge UUID is the
+  provider message ID, recipients must be E.164, and provider `202` remains
+  queued—not delivered.
+- Reason: caller-supplied IDs make the single authentication-recovery replay
+  deterministic. A send timeout or `5xx` remains an unknown outcome and is
+  never retried automatically; the corresponding challenge remains usable in
+  case the SMS arrives. Official SMSGate guidance classifies its public cloud
+  as unsuitable for sensitive data, so production configuration rejects the
+  public-cloud host and non-HTTPS endpoints; production should use a private
+  SMSGate server.

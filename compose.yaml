@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-collage}
       POSTGRES_USER: ${POSTGRES_USER:-collage}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-collage_local_only}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-collage}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -36,7 +36,7 @@ services:
       dockerfile: docker/Dockerfile.migrate
       target: migration
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage_local_only@postgres:5432/collage}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage@postgres:5432/collage}
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,9 +51,42 @@ services:
       - path: .env
         required: false
     environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       API_PORT: 4000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage_local_only@postgres:5432/collage}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-https://api.example.ng}
+      MINI_APP_PUBLIC_URL: ${MINI_APP_PUBLIC_URL:-https://app.example.ng}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.example.ng}
+      API_SESSION_SECRET: ${API_SESSION_SECRET:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage@postgres:5432/collage}
       REDIS_URL: redis://redis:6379
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      APP_ENCRYPTION_KEY_ID: ${APP_ENCRYPTION_KEY_ID:-}
+      APP_ENCRYPTION_KEY_BASE64: ${APP_ENCRYPTION_KEY_BASE64:-}
+      APP_HASH_PEPPER: ${APP_HASH_PEPPER:-}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      LAUNCH_TOKEN_HASH_SECRET: ${LAUNCH_TOKEN_HASH_SECRET:-}
+      PROVIDER_CALLS_ENABLED: ${PROVIDER_CALLS_ENABLED:-false}
+      MONNIFY_ENV: ${MONNIFY_ENV:-sandbox}
+      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-https://sandbox.monnify.com}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER: ${MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER:-}
+      MONNIFY_WEBHOOK_ALLOWED_IPS: ${MONNIFY_WEBHOOK_ALLOWED_IPS:-35.242.133.146}
+      MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS: ${MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS:-false}
+      OTP_PROVIDER: ${OTP_PROVIDER:-unconfigured}
+      OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-600}
+      SMSGATE_API_BASE_URL: ${SMSGATE_API_BASE_URL:-https://api.sms-gate.app/3rdparty/v1}
+      SMSGATE_DEPLOYMENT_MODE: ${SMSGATE_DEPLOYMENT_MODE:-cloud}
+      SMSGATE_AUTH_MODE: ${SMSGATE_AUTH_MODE:-jwt}
+      SMSGATE_USERNAME: ${SMSGATE_USERNAME:-}
+      SMSGATE_PASSWORD: ${SMSGATE_PASSWORD:-}
+      SMSGATE_DEVICE_ID: ${SMSGATE_DEVICE_ID:-}
+      SMSGATE_SIM_NUMBER: ${SMSGATE_SIM_NUMBER:-1}
+      SMSGATE_PRIORITY: ${SMSGATE_PRIORITY:-100}
+      SMSGATE_REQUEST_TIMEOUT_MS: ${SMSGATE_REQUEST_TIMEOUT_MS:-10000}
+      SMSGATE_TOKEN_TTL_SECONDS: ${SMSGATE_TOKEN_TTL_SECONDS:-3600}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -113,7 +146,7 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage_local_only@postgres:5432/collage}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage@postgres:5432/collage}
       REDIS_URL: redis://redis:6379
       WORKER_HEALTH_PORT: 4002
     depends_on:

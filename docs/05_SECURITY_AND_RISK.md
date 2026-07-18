@@ -81,6 +81,7 @@ Sensitive values include:
 - card token;
 - mandate code/reference where sensitive;
 - Monnify credentials;
+- SMSGate credentials and access/refresh tokens;
 - Telegram bot token;
 - encryption keys;
 - internal service credentials.
@@ -96,6 +97,12 @@ Controls:
 - encrypted backups;
 - explicit access methods for unmask/decrypt;
 - rotation strategy for encryption key versions.
+
+Production OTP transport uses a private HTTPS SMSGate server. SMSGate public
+cloud is development-only because the provider documents it as unsuitable for
+sensitive data. The Android Local Server is development-only, same-network,
+Basic-authenticated transport. OTP payloads and recipient phone numbers are
+never logged.
 
 ## 6. NIN handling
 

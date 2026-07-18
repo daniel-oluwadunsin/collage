@@ -156,3 +156,121 @@ The final command table is updated only from commands actually executed.
 | `pnpm build`                                   | Pass — 15 Turbo tasks              |
 | `docker compose config --quiet`                | Pass                               |
 | Migration image build                          | Pass — foundation image            |
+
+## Milestone 3 — public/internal API and Monnify adapter
+
+Status: implemented; production provider and compliance enablement remain
+blocked as listed below.
+
+### Delivered
+
+- [x] Hardened Express factory with request IDs, redacted Pino HTTP logging,
+      Helmet, allowlist CORS, 64 KiB JSON/256 KiB webhook limits, rate limiting,
+      centralized typed errors, liveness/readiness, and OpenAPI/Swagger.
+- [x] Telegram Mini App init-data verification, opaque launch-token binding,
+      short-lived signed API sessions, and launch eligibility checks.
+- [x] Fresh current-group-admin enforcement for administrative Collage actions.
+- [x] Collage create/read/update/open-registration/status/rules/positions/
+      history APIs and asynchronous reconciliation requests.
+- [x] Resumable registration details, payout-position reservation, OTP provider
+      abstraction/challenges, phone verification, and immutable rule consent.
+- [x] Monnify bank catalogue/name enquiry, resolution binding, encrypted payout
+      accounts, masked DTOs, and safe replacement.
+- [x] Idempotent card checkout setup, server verification, exact amount/currency
+      checks, encrypted token activation, and safe replacement cutover.
+- [x] Direct-debit mandate create/status/activation with encrypted mandate data.
+- [x] Idempotent manual checkout initialization and queued status rechecks.
+- [x] Failed-payout account replacement and retry request APIs restricted to the
+      scheduled recipient and reconciled terminal failure.
+- [x] Replay-resistant internal bot API, Telegram membership synchronization,
+      leave-obligation updates, opaque launch-token actions, and HTML-safe
+      presentation view models.
+- [x] Typed Monnify authentication, checkout initialization/verification,
+      card-token charge, mandate create/status/debit/debit-status, banks,
+      account validation, transfers/status, wallet balance, webhook
+      validation/normalization, decimal money serialization, and safe errors.
+- [x] Raw-body Monnify webhook ingress with production HMAC/source-IP policy,
+      explicit unsigned-sandbox opt-in, encrypted inbox, fingerprint dedupe,
+      transactional outbox, and fast acknowledgement.
+- [x] PostgreSQL migrations correcting webhook reference indexing and adding
+      encrypted card checkout URL persistence.
+- [x] Unit/provider fixture tests plus PostgreSQL integration tests for fresh
+      admin authorization, state conflicts, idempotent setup, and webhook
+      dedupe/outbox atomicity.
+
+### Material blockers and intentionally deferred work
+
+- SMSGate is the selected OTP transport. Public-cloud mode is development-only;
+  production configuration requires a private HTTPS SMSGate server.
+- Live identity/NIN verification feature access and provider are not confirmed;
+  registration remains `IDENTITY_PENDING` and cannot fake completion.
+- Monnify card tokenization, direct debit, disbursement, source wallet, IP
+  whitelist, and MFA mode require merchant enablement and live confirmation.
+- The worker processors that consume webhook/reconciliation/payment/payout
+  outbox events are the next milestone. This milestone queues work but does not
+  move money inside HTTP handlers.
+- Custody/settlement model, payout MFA operating procedure, and legal/compliance
+  approval remain product-owner decisions.
+
+## Milestone 3 verification evidence
+
+The final command table is populated from the concluding verification run.
+
+| Command                                | Result                               |
+| -------------------------------------- | ------------------------------------ |
+| `pnpm install --frozen-lockfile`       | Pass                                 |
+| `pnpm db:generate`                     | Pass — Prisma 7.8 client generated   |
+| Four migrations against `collage_test` | Pass                                 |
+| `pnpm format:check`                    | Pass                                 |
+| `pnpm lint`                            | Pass                                 |
+| `pnpm typecheck`                       | Pass — 25 Turbo tasks                |
+| `pnpm test`                            | Pass — 37 tests; DB suites separate  |
+| PostgreSQL database integration tests  | Pass — 4 concurrency/invariant tests |
+| PostgreSQL API integration tests       | Pass — 9 tests, none skipped         |
+| `pnpm test:integration`                | Pass — app integration suites        |
+| `pnpm build`                           | Pass — 15 Turbo tasks                |
+
+## SMSGate OTP provider addendum
+
+Status: implemented on 2026-07-18; verification evidence is recorded after the
+concluding repository checks.
+
+### Delivered
+
+- [x] Typed SMSGate package with cloud/private JWT and local Basic
+      authentication.
+- [x] Access-token caching, refresh-token rotation, and one authorization
+      recovery replay using the same caller-supplied message ID.
+- [x] E.164 validation, OTP TTL, priority, device/SIM selection, delivery-report
+      request, documented message-state parsing, and status lookup.
+- [x] No retry for ambiguous send timeouts, network failures, or server errors.
+- [x] Conditional environment validation, secret/log redaction, Compose wiring,
+      Android setup guidance, and official-provider references.
+- [x] API registration challenges use the challenge UUID as the SMSGate message
+      ID and keep HTTP acceptance separate from user-entered OTP verification.
+
+### Material deployment requirement
+
+- A production Collage deployment needs a private HTTPS SMSGate server and an
+  online Android device with SMS capability. The official public cloud is
+  rejected in production because SMSGate documents it as appropriate only for
+  non-sensitive data.
+
+### Verification evidence
+
+| Command/evidence                             | Result                                      |
+| -------------------------------------------- | ------------------------------------------- |
+| `pnpm install --frozen-lockfile`             | Pass — 19 workspace projects                |
+| `pnpm format:check`                          | Pass                                        |
+| `pnpm lint`                                  | Pass — 27 Turbo tasks                       |
+| `pnpm typecheck`                             | Pass — 27 Turbo tasks                       |
+| `pnpm test`                                  | Pass; SMSGate fixture suite 6/6             |
+| PostgreSQL database integration tests        | Pass — 4/4, none skipped                    |
+| PostgreSQL API integration tests             | Pass — 11/11, none skipped                  |
+| `pnpm build`                                 | Pass — 16 Turbo tasks                       |
+| `docker compose config --quiet`              | Pass                                        |
+| API runtime image `collage-api:smsgate-test` | Pass — multi-stage production target        |
+| Live SMS to a real Android/SIM               | Not run — requires operator credentials/SIM |
+| `docker compose config --quiet`              | Pass                                        |
+| API multi-stage image build                  | Pass                                        |
+| Compose migrate/API readiness smoke          | Pass — non-root API returned ready          |

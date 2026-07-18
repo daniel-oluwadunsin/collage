@@ -70,9 +70,18 @@ MONNIFY_WEBHOOK_ALLOWED_IPS=
 CARD_SETUP_POLICY=commitment_deposit
 CARD_SETUP_AMOUNT_MINOR=10000
 
-OTP_PROVIDER=console
+OTP_PROVIDER=smsgate
 OTP_TTL_SECONDS=600
-OTP_DEV_CODE=123456
+SMSGATE_API_BASE_URL=https://api.sms-gate.app/3rdparty/v1
+SMSGATE_DEPLOYMENT_MODE=cloud
+SMSGATE_AUTH_MODE=jwt
+SMSGATE_USERNAME=
+SMSGATE_PASSWORD=
+SMSGATE_DEVICE_ID=
+SMSGATE_SIM_NUMBER=1
+SMSGATE_PRIORITY=100
+SMSGATE_REQUEST_TIMEOUT_MS=10000
+SMSGATE_TOKEN_TTL_SECONDS=3600
 
 SWAGGER_ENABLED=true
 SWAGGER_PATH=/docs
@@ -82,11 +91,37 @@ Production rules:
 
 - require webhook signature;
 - exact CORS origins;
-- real OTP/identity provider;
-- no fixed OTP;
+- private HTTPS SMSGate server for production OTP data;
+- no fixed OTP or logged SMS payload;
 - protect/disable Swagger if desired;
 - use production Monnify URL;
 - load secrets from a secret manager.
+
+SMSGate deployment notes:
+
+- Android Public Cloud mode uses
+  `https://api.sms-gate.app/3rdparty/v1` with JWT authentication. Official
+  SMSGate guidance describes the public cloud as appropriate only for
+  non-sensitive data, so Collage rejects that host when
+  `NODE_ENV=production`. Set `SMSGATE_DEPLOYMENT_MODE=cloud`.
+- A private server uses the full
+  `https://sms.example.ng/api/3rdparty/v1` prefix and JWT authentication. This
+  is the production-recommended mode; set
+  `SMSGATE_DEPLOYMENT_MODE=private`.
+- Android Local Server mode is useful for development on the same network. Set
+  `SMSGATE_API_BASE_URL=http://<phone-ip>:8080`,
+  `SMSGATE_DEPLOYMENT_MODE=local`, and `SMSGATE_AUTH_MODE=basic`. Collage then
+  uses the documented `/message` endpoint. A Docker container must be able to
+  route to the phone; `localhost` inside the container is not the Android
+  device.
+- Copy the generated username/password from the Android SMSGate app into a
+  local secret store. Never commit them. Optionally pin `SMSGATE_DEVICE_ID` and
+  `SMSGATE_SIM_NUMBER` when the account has multiple devices or SIMs.
+- SMSGate HTTP `202` means queued, not delivered. Collage never treats it as
+  proof of phone ownership; only the user-entered OTP verifies the phone.
+- A send timeout or `5xx` has an unknown outcome and is not retried
+  automatically. The challenge remains usable if the SMS later arrives; the
+  user may also request a new challenge/code.
 
 ### 2.3 Bot
 

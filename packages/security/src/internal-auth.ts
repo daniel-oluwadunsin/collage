@@ -114,7 +114,9 @@ export class MemoryReplayStore implements ReplayStore {
     if (this.#claims.has(key)) {
       return Promise.resolve(false);
     }
-    this.#claims.set(key, expiresAt.getTime());
+    // Keep the claim for at least one verification window even when callers
+    // use a deterministic clock in tests or the local wall clock moves.
+    this.#claims.set(key, Math.max(expiresAt.getTime(), now + 60_000));
     return Promise.resolve(true);
   }
 }

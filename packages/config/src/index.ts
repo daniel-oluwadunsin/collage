@@ -40,15 +40,142 @@ const providerSwitchSchema = z.object({
     .transform((value) => value === "true"),
 });
 
+const smsGateEnvironmentSchema = z.object({
+  OTP_PROVIDER: z.enum(["unconfigured", "smsgate"]).default("unconfigured"),
+  OTP_TTL_SECONDS: z.coerce.number().int().min(30).max(3_600).default(600),
+  SMSGATE_API_BASE_URL: urlSchema.default(
+    "https://api.sms-gate.app/3rdparty/v1",
+  ),
+  SMSGATE_DEPLOYMENT_MODE: z
+    .enum(["cloud", "local", "private"])
+    .default("cloud"),
+  SMSGATE_AUTH_MODE: z.enum(["basic", "jwt"]).default("jwt"),
+  SMSGATE_USERNAME: z.string().default(""),
+  SMSGATE_PASSWORD: z.string().default(""),
+  SMSGATE_DEVICE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(1).max(21).optional(),
+  ),
+  SMSGATE_SIM_NUMBER: z.coerce.number().int().min(1).max(3).default(1),
+  SMSGATE_PRIORITY: z.coerce.number().int().min(-128).max(127).default(100),
+  SMSGATE_REQUEST_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(60_000)
+    .default(10_000),
+  SMSGATE_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(300)
+    .max(86_400)
+    .default(3_600),
+});
+
 export const apiEnvironmentSchema = serviceEnvironmentSchema
   .extend({
     API_PORT: portSchema.default(4000),
     API_PUBLIC_URL: urlSchema,
+    API_SESSION_SECRET: secretSchema,
+    CORS_ALLOWED_ORIGINS: z.string().min(1),
+    MINI_APP_PUBLIC_URL: urlSchema,
     TELEGRAM_BOT_TOKEN: z.string().min(10),
+    MONNIFY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+    MONNIFY_BASE_URL: urlSchema,
+    MONNIFY_API_KEY: z.string(),
+    MONNIFY_SECRET_KEY: z.string(),
+    MONNIFY_CONTRACT_CODE: z.string(),
+    MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().min(1).optional(),
+    ),
+    MONNIFY_WEBHOOK_ALLOWED_IPS: z.string().default("35.242.133.146"),
+    MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
   })
   .and(persistenceEnvironmentSchema)
   .and(cryptographyEnvironmentSchema)
-  .and(providerSwitchSchema);
+  .and(providerSwitchSchema)
+  .and(smsGateEnvironmentSchema)
+  .superRefine((value, context) => {
+    if (
+      value.PROVIDER_CALLS_ENABLED &&
+      [
+        value.MONNIFY_API_KEY,
+        value.MONNIFY_SECRET_KEY,
+        value.MONNIFY_CONTRACT_CODE,
+      ].some((secret) => secret.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Monnify credentials are required when provider calls are enabled",
+      });
+    }
+    if (
+      value.MONNIFY_ENV === "production" &&
+      value.MONNIFY_SECRET_KEY.length === 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Monnify secret is required for production webhook validation",
+      });
+    }
+    if (
+      value.OTP_PROVIDER === "smsgate" &&
+      (value.SMSGATE_USERNAME.length === 0 ||
+        value.SMSGATE_PASSWORD.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "SMSGate credentials are required when SMSGate OTP is enabled",
+      });
+    }
+    if (
+      value.OTP_PROVIDER === "smsgate" &&
+      value.SMSGATE_DEPLOYMENT_MODE === "local" &&
+      value.SMSGATE_AUTH_MODE !== "basic"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "SMSGate Local Server requires Basic authentication",
+      });
+    }
+    if (
+      value.OTP_PROVIDER === "smsgate" &&
+      value.SMSGATE_DEPLOYMENT_MODE === "private" &&
+      new URL(value.SMSGATE_API_BASE_URL).hostname === "api.sms-gate.app"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "SMSGate private deployment cannot use the public-cloud API host",
+      });
+    }
+    if (
+      value.NODE_ENV === "production" &&
+      value.OTP_PROVIDER === "smsgate" &&
+      value.SMSGATE_DEPLOYMENT_MODE !== "private"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Production Collage OTP requires SMSGate private-server deployment mode",
+      });
+    }
+    if (
+      value.NODE_ENV === "production" &&
+      value.OTP_PROVIDER === "smsgate" &&
+      new URL(value.SMSGATE_API_BASE_URL).protocol !== "https:"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Production SMSGate requires HTTPS",
+      });
+    }
+  });
 
 export const botEnvironmentSchema = serviceEnvironmentSchema
   .extend({

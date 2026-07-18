@@ -1,20 +1,200 @@
-import { parsePort } from "@collage/config";
+import { apiEnvironmentSchema, parseEnvironment } from "@collage/config";
+import {
+  checkDatabaseReadiness,
+  createPrismaClient,
+  PrismaLaunchTokenStore,
+} from "@collage/database";
 import { createLogger } from "@collage/logger";
-import { createApiApp } from "./app.js";
+import {
+  MonnifyClient,
+  type AccountValidation,
+  type Bank,
+  type CheckoutInitialization,
+  type MandateResult,
+  type TransactionVerification,
+} from "@collage/monnify";
+import { createRedisConnection } from "@collage/queue";
+import { LaunchTokenService, type ReplayStore } from "@collage/security";
+import { SmsGateClient, SmsGateOtpProvider } from "@collage/smsgate";
 
-const logger = createLogger("api");
-const port = parsePort(process.env.API_PORT, 4000);
-const server = createApiApp().listen(port, "0.0.0.0", () => {
-  logger.info({ port }, "API health service listening");
+import { createApiApp } from "./app.js";
+import {
+  DatabaseWorkflowService,
+  type OtpProvider,
+  type ProviderPort,
+} from "./database-workflow.js";
+import { createInternalAuthenticator } from "./internal-auth.js";
+import { SessionService } from "./session.js";
+import { MonnifyWebhookIngress } from "./webhook-ingress.js";
+
+const environment = parseEnvironment(apiEnvironmentSchema, process.env);
+const logger = createLogger("api", { level: environment.LOG_LEVEL });
+const client = createPrismaClient(environment.DATABASE_URL);
+const redis = createRedisConnection(environment.REDIS_URL);
+
+class RedisReplayStore implements ReplayStore {
+  claim(key: string, expiresAt: Date): Promise<boolean> {
+    const ttl = Math.max(1, expiresAt.getTime() - Date.now());
+    return redis
+      .set(`internal-auth:${key}`, "1", "PX", ttl, "NX")
+      .then((result) => result === "OK");
+  }
+}
+
+class DisabledProvider implements ProviderPort {
+  private unavailable(): Promise<never> {
+    return Promise.reject(new Error("Provider calls are disabled"));
+  }
+
+  createMandate(): Promise<MandateResult> {
+    return this.unavailable();
+  }
+
+  getBanks(): Promise<readonly Bank[]> {
+    return this.unavailable();
+  }
+
+  getMandateStatus(): Promise<MandateResult> {
+    return this.unavailable();
+  }
+
+  initializeCheckout(): Promise<CheckoutInitialization> {
+    return this.unavailable();
+  }
+
+  validateBankAccount(): Promise<AccountValidation> {
+    return this.unavailable();
+  }
+
+  verifyTransactionByPaymentReference(): Promise<TransactionVerification> {
+    return this.unavailable();
+  }
+}
+
+class UnconfiguredOtpProvider implements OtpProvider {
+  send(): Promise<{ readonly outcome: "queued" }> {
+    return Promise.reject(
+      new Error("Production OTP provider is not configured"),
+    );
+  }
+}
+
+const sessions = new SessionService(
+  Buffer.from(environment.API_SESSION_SECRET, "utf8"),
+);
+const encryption = {
+  activeKeyId: environment.APP_ENCRYPTION_KEY_ID,
+  keys: {
+    [environment.APP_ENCRYPTION_KEY_ID]: Buffer.from(
+      environment.APP_ENCRYPTION_KEY_BASE64,
+      "base64",
+    ),
+  },
+};
+const monnify: ProviderPort = environment.PROVIDER_CALLS_ENABLED
+  ? new MonnifyClient({
+      apiKey: environment.MONNIFY_API_KEY,
+      baseUrl: environment.MONNIFY_BASE_URL,
+      contractCode: environment.MONNIFY_CONTRACT_CODE,
+      secretKey: environment.MONNIFY_SECRET_KEY,
+      ...(environment.MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER === undefined
+        ? {}
+        : {
+            sourceWalletAccountNumber:
+              environment.MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER,
+          }),
+    })
+  : new DisabledProvider();
+const launchTokens = new LaunchTokenService(
+  new PrismaLaunchTokenStore(client),
+  Buffer.from(environment.LAUNCH_TOKEN_HASH_SECRET, "utf8"),
+);
+const otp: OtpProvider =
+  environment.OTP_PROVIDER === "smsgate"
+    ? new SmsGateOtpProvider(
+        new SmsGateClient({
+          apiBaseUrl: environment.SMSGATE_API_BASE_URL,
+          authenticationMode: environment.SMSGATE_AUTH_MODE,
+          deploymentMode: environment.SMSGATE_DEPLOYMENT_MODE,
+          password: environment.SMSGATE_PASSWORD,
+          tokenTtlSeconds: environment.SMSGATE_TOKEN_TTL_SECONDS,
+          timeoutMilliseconds: environment.SMSGATE_REQUEST_TIMEOUT_MS,
+          username: environment.SMSGATE_USERNAME,
+        }),
+        {
+          ...(environment.SMSGATE_DEVICE_ID === undefined
+            ? {}
+            : { deviceId: environment.SMSGATE_DEVICE_ID }),
+          priority: environment.SMSGATE_PRIORITY,
+          simNumber: environment.SMSGATE_SIM_NUMBER,
+          withDeliveryReport: true,
+        },
+      )
+    : new UnconfiguredOtpProvider();
+const workflow = new DatabaseWorkflowService({
+  client,
+  encryption,
+  hashKey: Buffer.from(environment.APP_HASH_PEPPER, "utf8"),
+  launchTokens,
+  miniAppUrl: environment.MINI_APP_PUBLIC_URL,
+  monnify,
+  otp,
+  otpTtlSeconds: environment.OTP_TTL_SECONDS,
+  providerCallsEnabled: environment.PROVIDER_CALLS_ENABLED,
+  providerEnvironment: environment.MONNIFY_ENV,
+  publicUrl: environment.API_PUBLIC_URL,
+  sessions,
+  telegramBotToken: environment.TELEGRAM_BOT_TOKEN,
+});
+const webhookIngress =
+  environment.MONNIFY_SECRET_KEY.length === 0
+    ? undefined
+    : new MonnifyWebhookIngress({
+        client,
+        encryption,
+        environment: environment.MONNIFY_ENV,
+        secretKey: environment.MONNIFY_SECRET_KEY,
+        allowUnsignedSandbox:
+          environment.MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS,
+        allowedProductionIps: new Set(
+          environment.MONNIFY_WEBHOOK_ALLOWED_IPS.split(",")
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0),
+        ),
+      });
+
+const app = createApiApp({
+  allowedOrigins: environment.CORS_ALLOWED_ORIGINS.split(",").map((value) =>
+    value.trim(),
+  ),
+  internalAuthenticate: createInternalAuthenticator(
+    Buffer.from(environment.INTERNAL_SERVICE_TOKEN, "utf8"),
+    new RedisReplayStore(),
+  ),
+  logger,
+  readiness: async () => {
+    await checkDatabaseReadiness(client);
+    await redis.ping();
+    return true;
+  },
+  sessionService: sessions,
+  workflow,
+  ...(webhookIngress === undefined ? {} : { webhookIngress }),
+});
+
+const server = app.listen(environment.API_PORT, "0.0.0.0", () => {
+  logger.info({ port: environment.API_PORT }, "API listening");
 });
 
 const shutdown = (signal: NodeJS.Signals): void => {
   logger.info({ signal }, "API shutdown requested");
   server.close((error) => {
-    if (error !== undefined) {
-      logger.error({ error }, "API shutdown failed");
-      process.exitCode = 1;
-    }
+    void Promise.allSettled([client.$disconnect(), redis.quit()]).then(() => {
+      if (error !== undefined) {
+        logger.error({ error }, "API shutdown failed");
+        process.exitCode = 1;
+      }
+    });
   });
 };
 

@@ -20,6 +20,7 @@ collage/
 │   ├── monnify/
 │   ├── queue/
 │   ├── security/
+│   ├── smsgate/
 │   ├── telegram/
 │   ├── testing/
 │   ├── ui/
@@ -233,7 +234,19 @@ Typed provider adapter for:
 
 Raw Monnify response structures must not leak through the domain or UI.
 
-### 3.5 `packages/telegram`
+### 3.5 `packages/smsgate`
+
+- typed Android SMS gateway client;
+- cloud/private JWT authentication with token rotation;
+- local-server Basic authentication;
+- E.164, TTL, priority, device, and SIM validation;
+- OTP message composition;
+- documented status parsing and safe error classification;
+- deterministic message IDs and no ambiguous send retry.
+
+Raw recipients, OTPs, credentials, and token values must not be logged.
+
+### 3.6 `packages/telegram`
 
 - Mini App `initData` verification;
 - direct-link builder;
@@ -244,7 +257,7 @@ Raw Monnify response structures must not leak through the domain or UI.
 - Telegram API helpers;
 - update fixtures for tests.
 
-### 3.6 `packages/queue`
+### 3.7 `packages/queue`
 
 - queue names;
 - job schemas;
@@ -253,7 +266,7 @@ Raw Monnify response structures must not leak through the domain or UI.
 - Redis connection factory;
 - dead-letter/failure conventions.
 
-### 3.7 `packages/security`
+### 3.8 `packages/security`
 
 - AES-256-GCM field encryption with versioned envelopes;
 - deterministic keyed hashes where necessary;
@@ -264,11 +277,11 @@ Raw Monnify response structures must not leak through the domain or UI.
 - correlation IDs;
 - opaque launch-token implementation.
 
-### 3.8 `packages/config`
+### 3.9 `packages/config`
 
 Per-app environment schemas. Every process validates its own environment at startup and exits with a clear error when invalid.
 
-### 3.9 `packages/logger`
+### 3.10 `packages/logger`
 
 Pino configuration with:
 
@@ -278,7 +291,7 @@ Pino configuration with:
 - child loggers for request/job/provider operations;
 - request-body logging disabled on sensitive routes.
 
-### 3.10 `packages/ui`
+### 3.11 `packages/ui`
 
 Shared shadcn-based primitives, theme tokens, and asynchronous-state components. Business feature components remain inside `apps/mini-app`.
 

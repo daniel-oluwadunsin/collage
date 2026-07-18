@@ -433,6 +433,7 @@ model CardAuthorization {
   currency           String                 @default("NGN") @db.Char(3)
   idempotencyKey     String                 @unique @db.VarChar(191)
   providerReference  String?                @db.VarChar(191)
+  checkoutUrlEncrypted String?
   state              ProviderOperationState @default(CREATED)
   reusableTokenReady Boolean                @default(false)
   expiresAt          DateTime?              @db.Timestamptz(6)
@@ -639,7 +640,7 @@ model WebhookEvent {
   processingErrorCode String?   @db.VarChar(128)
 
   @@unique([provider, providerEnvironment, fingerprint])
-  @@unique([provider, providerEnvironment, providerEventId])
+  @@index([provider, providerEnvironment, providerEventId])
   @@index([processedAt, receivedAt])
   @@map("webhook_events")
 }

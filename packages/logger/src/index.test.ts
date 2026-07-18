@@ -20,10 +20,19 @@ void test("redacts credentials, identity data, and authorization headers", () =>
   logger.info({
     req: {
       headers: { authorization: "Bearer secret" },
-      body: { nin: "12345678901", accountNumber: "0123456789" },
+      body: {
+        nin: "12345678901",
+        accountNumber: "0123456789",
+        password: "gateway-password",
+        accessToken: "gateway-access-token",
+        refreshToken: "gateway-refresh-token",
+      },
     },
   });
   const output = chunks.join("");
-  assert.doesNotMatch(output, /12345678901|0123456789|Bearer secret/u);
+  assert.doesNotMatch(
+    output,
+    /12345678901|0123456789|Bearer secret|gateway-(?:password|access-token|refresh-token)/u,
+  );
   assert.match(output, /\[REDACTED\]/u);
 });

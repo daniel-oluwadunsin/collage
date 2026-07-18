@@ -11,6 +11,6 @@ export default defineConfig({
     // connect still receive DATABASE_URL from the invoking environment.
     url:
       process.env.DATABASE_URL ??
-      "postgresql://collage:collage_local_only@localhost:5432/collage",
+      "postgresql://collage:collage@localhost:5432/collage",
   },
 });

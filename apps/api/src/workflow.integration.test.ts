@@ -265,6 +265,72 @@ void integrationTest(
 );
 
 void integrationTest(
+  "persists identity before OTP and reserves only the selected position later",
+  async () => {
+    await reset();
+    const { chat, context, service, user } = await fixture();
+    await requireClient().telegramChatMembership.create({
+      data: {
+        chatId: chat.id,
+        userId: user.id,
+        role: "ADMINISTRATOR",
+        state: "ACTIVE",
+      },
+    });
+    const collage = (await service.createCollage(context, collageInput)) as {
+      readonly id: string;
+    };
+    await service.openRegistration(context, collage.id);
+    await service.submitRegistrationDetails(context, collage.id, {
+      stage: "IDENTITY",
+      legalName: "Fixture Member",
+      nin: "12345678901",
+    });
+    const identityStage = await requireClient().collageMember.findUniqueOrThrow(
+      {
+        where: {
+          collageId_userId: { collageId: collage.id, userId: user.id },
+        },
+      },
+    );
+    assert.equal(identityStage.state, "DETAILS_SUBMITTED");
+    assert.equal(identityStage.payoutPosition, null);
+    assert.equal(
+      await requireClient().payoutPositionReservation.count({
+        where: { collageId: collage.id },
+      }),
+      0,
+    );
+
+    await service.requestOtp(context, collage.id, {
+      phone: "+2348012345678",
+    });
+    await service.submitRegistrationDetails(context, collage.id, {
+      stage: "PREFERENCES",
+      payoutPosition: 2,
+      preferredChargeRule: { dayOfWeek: 4, time: "09:00" },
+    });
+    const preferenceStage =
+      await requireClient().collageMember.findUniqueOrThrow({
+        where: {
+          collageId_userId: { collageId: collage.id, userId: user.id },
+        },
+      });
+    assert.equal(preferenceStage.payoutPosition, 2);
+    assert.deepEqual(preferenceStage.preferredChargeRule, {
+      dayOfWeek: 4,
+      time: "09:00",
+    });
+    assert.equal(
+      await requireClient().payoutPositionReservation.count({
+        where: { collageId: collage.id, userId: user.id, position: 2 },
+      }),
+      1,
+    );
+  },
+);
+
+void integrationTest(
   "keeps an OTP challenge usable when provider enqueue outcome is unknown",
   async () => {
     await reset();

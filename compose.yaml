@@ -207,6 +207,12 @@ services:
       context: .
       dockerfile: docker/Dockerfile.mini-app
       target: runtime
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.example.ng/v1}
+        NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${NEXT_PUBLIC_TELEGRAM_BOT_USERNAME:-}
+        NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME: ${NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME:-}
+        NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV:-production}
+        NEXT_PUBLIC_ENABLE_TEST_BRIDGE: "false"
     env_file:
       - path: .env
         required: false

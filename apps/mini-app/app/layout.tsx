@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Collage design system",
+  title: "Collage",
   description:
-    "Telegram-native Ajo operations, designed for clear financial state.",
+    "Telegram-native Ajo registration, contributions, and payout operations.",
 };
 
 export const viewport: Viewport = {

@@ -128,12 +128,30 @@ const createCollageSchema = z.object({
   timezone: z.string().min(1).max(64),
 });
 
-const registrationSchema = z.object({
+const registrationIdentitySchema = z.object({
+  stage: z.literal("IDENTITY"),
+  legalName: z.string().trim().min(3).max(160),
+  nin: z.string().regex(/^\d{11}$/u),
+});
+
+const registrationPreferencesSchema = z.object({
+  stage: z.literal("PREFERENCES"),
+  payoutPosition: z.number().int().positive(),
+  preferredChargeRule: z.record(z.string(), z.unknown()),
+});
+
+const registrationLegacySchema = z.object({
   legalName: z.string().trim().min(3).max(160),
   nin: z.string().regex(/^\d{11}$/u),
   payoutPosition: z.number().int().positive(),
   preferredChargeRule: z.record(z.string(), z.unknown()),
 });
+
+const registrationSchema = z.union([
+  registrationIdentitySchema,
+  registrationPreferencesSchema,
+  registrationLegacySchema,
+]);
 
 const bankSchema = z.object({
   accountNumber,
@@ -212,7 +230,15 @@ export class DatabaseWorkflowService implements WorkflowService {
         "The Mini App launch token is invalid or expired.",
       );
     }
+    let launchChat: {
+      readonly telegramChatId: string;
+      readonly title: string;
+    } | null = null;
     if (launch?.chatId !== undefined) {
+      launchChat = await this.options.client.telegramChat.findUnique({
+        where: { id: launch.chatId },
+        select: { telegramChatId: true, title: true },
+      });
       const membership =
         await this.options.client.telegramChatMembership.findUnique({
           where: {
@@ -260,6 +286,13 @@ export class DatabaseWorkflowService implements WorkflowService {
           .join(" "),
       },
       launch,
+      launchContext:
+        launchChat === null
+          ? null
+          : {
+              telegramChatId: launchChat.telegramChatId,
+              groupTitle: launchChat.title,
+            },
     });
   }
 
@@ -270,6 +303,16 @@ export class DatabaseWorkflowService implements WorkflowService {
         OR: [
           { members: { some: { userId: context.principal.userId } } },
           { creatorUserId: context.principal.userId },
+          {
+            chat: {
+              memberships: {
+                some: {
+                  userId: context.principal.userId,
+                  state: "ACTIVE",
+                },
+              },
+            },
+          },
         ],
       },
       include: {
@@ -618,6 +661,50 @@ export class DatabaseWorkflowService implements WorkflowService {
       await this.options.client.telegramIdentity.findFirstOrThrow({
         where: { userId: context.principal.userId },
       });
+    if ("stage" in value && value.stage === "IDENTITY") {
+      const member = await this.options.client.collageMember.upsert({
+        where: {
+          collageId_userId: { collageId, userId: context.principal.userId },
+        },
+        create: {
+          collageId,
+          userId: context.principal.userId,
+          telegramUserId: identity.telegramUserId,
+          state: "DETAILS_SUBMITTED",
+          legalNameEncrypted: encryptString(
+            value.legalName,
+            this.options.encryption,
+            `member:${collageId}:legal-name`,
+          ),
+          ninEncrypted: encryptString(
+            value.nin,
+            this.options.encryption,
+            `member:${collageId}:nin`,
+          ),
+          ninHash: keyedHash(value.nin, this.options.hashKey),
+        },
+        update: {
+          legalNameEncrypted: encryptString(
+            value.legalName,
+            this.options.encryption,
+            `member:${collageId}:legal-name`,
+          ),
+          ninEncrypted: encryptString(
+            value.nin,
+            this.options.encryption,
+            `member:${collageId}:nin`,
+          ),
+          ninHash: keyedHash(value.nin, this.options.hashKey),
+          state: "DETAILS_SUBMITTED",
+        },
+      });
+      return asData({
+        id: member.id,
+        state: member.state,
+        payoutPosition: member.payoutPosition,
+      });
+    }
+
     await reservePayoutPosition(this.options.client, {
       collageId,
       userId: context.principal.userId,
@@ -629,6 +716,24 @@ export class DatabaseWorkflowService implements WorkflowService {
         "That payout position is no longer available.",
       );
     });
+    if ("stage" in value) {
+      const member = await this.options.client.collageMember.update({
+        where: {
+          collageId_userId: { collageId, userId: context.principal.userId },
+        },
+        data: {
+          payoutPosition: value.payoutPosition,
+          preferredChargeRule:
+            value.preferredChargeRule as Prisma.InputJsonValue,
+        },
+      });
+      return asData({
+        id: member.id,
+        state: member.state,
+        payoutPosition: member.payoutPosition,
+      });
+    }
+
     const member = await this.options.client.collageMember.upsert({
       where: {
         collageId_userId: { collageId, userId: context.principal.userId },

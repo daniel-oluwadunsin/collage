@@ -188,13 +188,17 @@ APP_HASH_PEPPER=
 Only public values:
 
 ```dotenv
-NEXT_PUBLIC_API_URL=https://api.example.ng
+NEXT_PUBLIC_API_URL=https://api.example.ng/v1
 NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=
 NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=
 NEXT_PUBLIC_APP_ENV=development
+NEXT_PUBLIC_ENABLE_TEST_BRIDGE=false
 ```
 
 No Monnify secret, bot token, encryption key, internal service token, or database URL may be present.
+These values are compiled into the Next.js browser bundle. Supply them as
+Mini App image build arguments; `NEXT_PUBLIC_ENABLE_TEST_BRIDGE` must remain
+`false` for every deployable image.
 
 ### 2.6 Optional observability
 
@@ -216,7 +220,7 @@ Sensitive scrubbing is mandatory before enabling.
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "test:integration": "turbo test:integration",
+    "test:integration": "turbo test:integration --concurrency=1",
     "test:e2e": "turbo test:e2e",
     "format": "prettier --write .",
     "db:generate": "pnpm --filter @collage/database prisma:generate",

@@ -6,9 +6,22 @@ WORKDIR /workspace
 
 FROM base AS dependencies
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=collage-pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @collage/mini-app... \
+    --trust-lockfile --prefer-offline --network-concurrency=4 \
+    --fetch-retries=5 --fetch-timeout=120000
 
 FROM dependencies AS builder
+ARG NEXT_PUBLIC_API_URL=https://api.example.ng/v1
+ARG NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=
+ARG NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=
+ARG NEXT_PUBLIC_APP_ENV=production
+ARG NEXT_PUBLIC_ENABLE_TEST_BRIDGE=false
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=$NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+ENV NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=$NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME
+ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
+ENV NEXT_PUBLIC_ENABLE_TEST_BRIDGE=$NEXT_PUBLIC_ENABLE_TEST_BRIDGE
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @collage/mini-app... build
 

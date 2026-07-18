@@ -1,6 +1,11 @@
 .git
 .next
 .turbo
+**/.next
+**/.turbo
+**/playwright-report
+**/test-results
+**/*.tsbuildinfo
 coverage
 dist
 node_modules

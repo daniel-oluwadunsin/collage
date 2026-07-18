@@ -411,3 +411,80 @@ remain deployment gates.
   operator authorization procedure.
 - Provider calls remain disabled by default. No external Monnify or Telegram
   request was made by this milestone's tests.
+
+## Milestone 6 — Telegram Mini App
+
+Status: implemented on 2026-07-18; live Telegram/device and enabled-provider
+validation remain deployment gates.
+
+### Delivered
+
+- [x] Next.js App Router Mini App with strict TypeScript, Tailwind, shadcn-style
+      owned UI primitives, TanStack Query, React Hook Form/Zod, Telegram Apps
+      SDK, Framer Motion, and Lucide. Zustand was not added because all client
+      state is either local form/navigation state or TanStack-owned server
+      state.
+- [x] Telegram SDK boot, raw init-data/server bootstrap, opaque launch actions,
+      theme/viewport CSS binding, safe-area shell, compact/fullscreen layouts,
+      and explicit light/dark/system/Telegram theme control.
+- [x] Persistent Collage context and intentionally operational-fintech styling
+      using fixed Yellow `#FFD85C` and Blue `#0357EE`, borders and information
+      rhythm rather than a default component dashboard.
+- [x] Group-admin Collage creation and registration opening with integer
+      minor-unit conversion and strict-cycle review.
+- [x] Server-resumable identity, phone OTP, resolved/encrypted payout account,
+      concurrent position selection, daily/weekly/monthly/yearly charge
+      preferences, exact rule consent, card/direct-debit setup, and
+      server-confirmed completion presentation.
+- [x] Card and mandate redirects with opaque session IDs, durable
+      provider-pending state, capped terminal-aware polling, and no redirect or
+      optimistic financial success.
+- [x] Full/closed/already-registered/position-race handling; Collage status,
+      strict-cycle state, progress, and empty/error history.
+- [x] Manual payment initialization, unresolved-attempt pending state, status
+      polling, already-paid conflict handling, and confirmed success.
+- [x] Payout-account replacement, payment-method replacement with explicit old
+      method preservation, and terminal failed-payout account/retry flow.
+- [x] Branded boot skeleton, loading, provider pending, offline disablement,
+      empty, retryable error, expired, invalid, unauthorized, wrong-action, and
+      safe success states.
+- [x] Semantic headings/definition lists, labelled fields, visible focus,
+      keyboard controls, 48px actions, reduced-motion behavior, and no
+      color-only statuses.
+- [x] Compile-time-gated Playwright Telegram bridge with compact and fullscreen
+      projects and no Telegram or Monnify external calls.
+- [x] API compatibility fixes for staged registration, group-member Collage
+      reads, and safe external Telegram chat context during creation bootstrap.
+
+### Verification evidence
+
+| Command/evidence                     | Result                                             |
+| ------------------------------------ | -------------------------------------------------- |
+| `pnpm install --frozen-lockfile`     | Pass — pinned pnpm 11.14.0 lockfile                |
+| `pnpm format:check`                  | Pass                                               |
+| `pnpm lint`                          | Pass — 27 Turbo tasks                              |
+| `pnpm typecheck`                     | Pass — 27 Turbo tasks                              |
+| `pnpm test`                          | Pass — Mini App unit 2/2; repository suite passed  |
+| `pnpm test:integration`              | Pass — 21 tasks; no skipped integration cases      |
+| Database concurrency integration     | Pass — 4/4                                         |
+| API workflow integration             | Pass — 12/12                                       |
+| Bot/Redis integration                | Pass — 11/11                                       |
+| Worker crash/replay integration      | Pass — 10/10                                       |
+| Mini App Playwright                  | Pass — 20/20 across compact and fullscreen         |
+| `pnpm build`                         | Pass — 16 Turbo tasks; production Next build       |
+| `docker compose config --quiet`      | Pass                                               |
+| Mini App multi-stage image + smoke   | Pass — ready, page served, non-root UID/GID 1001   |
+| Compact/fullscreen visual inspection | Pass — responsive layout and theme tokens verified |
+
+### Deployment gates
+
+- Real Telegram Android, iOS, and Desktop clients must verify host theme
+  changes, safe/content-safe-area CSS values, keyboard behavior, provider
+  return navigation, and user-gesture fullscreen behavior.
+- Production must build with `NEXT_PUBLIC_ENABLE_TEST_BRIDGE=false`.
+- Monnify card tokenization/direct debit/disbursement and the selected identity
+  verification path remain provider/compliance gates; the UI cannot make these
+  production-ready by itself.
+- Provider return URLs must be configured to reopen the correct opaque Mini App
+  action; redirects remain non-authoritative and are followed by server
+  verification.

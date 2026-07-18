@@ -312,3 +312,61 @@
   process-local timers.
 - Reason: an application crash or Redis outage must leave a replayable database
   fact. Deterministic queue identity makes duplicate publication harmless.
+
+## D-032 — Registration writes follow the visible step order
+
+- Date: 2026-07-18
+- Decision: the existing registration-details endpoint accepts explicit
+  `IDENTITY` and `PREFERENCES` stages in addition to its backwards-compatible
+  combined payload. Identity creates the nullable-position member draft before
+  phone OTP; preferences later reserves the real position under the existing
+  concurrency invariant.
+- Reason: the approved Mini App verifies phone before payout-position choice.
+  Reserving a fabricated position or retaining NIN only in browser memory
+  across unrelated provider steps would be unsafe.
+
+## D-033 — Mini App server state is parsed and provider success is polled
+
+- Date: 2026-07-18
+- Decision: every Mini App response crosses a Zod boundary. Provider redirects
+  persist only an opaque authorization/attempt ID in session storage, then use
+  TanStack Query polling with terminal stop conditions. The browser never
+  stores NIN, phone, or account numbers and never treats a redirect as
+  registration, payment, mandate, or payout success.
+- Reason: client navigation is not financial evidence. Strict response parsing
+  and server-owned status make unknown outcomes explicit and replay safe.
+
+## D-034 — The Telegram E2E bridge is compile-time gated
+
+- Date: 2026-07-18
+- Decision: deterministic Telegram/API fixtures are available only when
+  `NEXT_PUBLIC_ENABLE_TEST_BRIDGE=true` at build/start time and the URL also
+  requests `bridge=1`. Production configuration must leave this false.
+- Reason: Playwright needs compact/fullscreen launch, provider-pending, and
+  terminal-state fixtures without signing real init data or calling Telegram
+  or Monnify. A two-part gate prevents an ordinary query parameter from
+  enabling fixtures.
+
+## D-035 — Shared-database integration suites run serially
+
+- Date: 2026-07-18
+- Decision: the root integration task limits Turborepo to one task at a time
+  and explicitly passes both test database and test Redis URLs. Individual
+  packages may still exercise concurrency inside their own isolated test
+  cases.
+- Reason: database, API, and worker integration suites intentionally truncate
+  their fixture schema. Running those independent suites against the same test
+  database concurrently creates cross-suite deadlocks and false failures; it
+  does not test an application invariant.
+
+## D-036 — Mini App image builds trust the reviewed frozen lockfile
+
+- Date: 2026-07-18
+- Decision: the Mini App Docker build uses pnpm's `--trust-lockfile` together
+  with `--frozen-lockfile`, exact dependency versions, recorded integrity
+  hashes, a filtered workspace install, and a persistent store cache.
+- Reason: the repository lockfile is the reviewed dependency-resolution
+  artifact. Re-fetching registry metadata for every locked workspace entry
+  adds a second mutable network dependency to image builds without changing
+  resolution; tarball integrity verification and the frozen lockfile remain
+  enforced.

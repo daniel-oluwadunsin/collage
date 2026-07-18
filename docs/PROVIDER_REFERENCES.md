@@ -13,6 +13,24 @@ Consulted on: 2026-07-18
   compare the SHA-256 HMAC in constant time, and independently enforce
   `auth_date` freshness. No Telegram network call was made.
 
+Re-consulted on 2026-07-18 before implementing the complete Mini App:
+
+- [Telegram Mini Apps — Designing Mini Apps](https://core.telegram.org/bots/webapps#designing-mini-apps) —
+  mobile-first behavior, responsive controls, accessible labels, live host
+  themes, and safe/content-safe-area requirements.
+- [Telegram Mini Apps — Direct Link Mini Apps](https://core.telegram.org/bots/webapps#direct-link-mini-apps) —
+  opaque `startapp` delivery, chat-aware direct links, compact launch mode, and
+  the rule that direct-link Mini Apps cannot read or send chat messages.
+- [Telegram Mini Apps — Initializing Mini Apps](https://core.telegram.org/bots/webapps#initializing-mini-apps) —
+  raw `initData` as the server-verification input, untrusted
+  `initDataUnsafe`, real-time `colorScheme`/theme parameters, stable viewport,
+  safe-area fields, `ready()`, BackButton, and user-gesture fullscreen.
+
+The implementation uses `@telegram-apps/sdk-react` for initialization, theme
+and viewport CSS binding, and readiness. The official Telegram page remains
+the platform source of truth. No Telegram network request was made by the
+test-only bridge.
+
 Re-consulted on 2026-07-18 before implementing the Telegram bot service:
 
 - [Telegram Bot API — Updates and `setWebhook`](https://core.telegram.org/bots/api#getting-updates) —

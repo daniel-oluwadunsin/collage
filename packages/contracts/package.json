@@ -10,10 +10,10 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test"
+    "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -23,6 +23,7 @@
     "@collage/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "eslint": "catalog:",
+    "tsx": "4.21.0",
     "typescript": "catalog:"
   }
 }

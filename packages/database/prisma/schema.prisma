@@ -1,11 +1,721 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/client"
+  provider     = "prisma-client"
+  output       = "../generated/client"
+  moduleFormat = "esm"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-// Milestone 1 intentionally defines no business models. Financial schema,
-// constraints, migrations, and generated client integration begin in Milestone 2.
+enum CollageState {
+  DRAFT
+  REGISTRATION_OPEN
+  STARTING
+  ACTIVE
+  BLOCKED
+  COMPLETED
+  SUSPENDED
+  CANCELLED
+}
+
+enum MemberState {
+  NOT_STARTED
+  DETAILS_SUBMITTED
+  IDENTITY_PENDING
+  IDENTITY_FAILED
+  PAYMENT_METHOD_REQUIRED
+  PAYMENT_METHOD_AUTHORIZING
+  REGISTERED
+  AT_RISK
+  DELINQUENT
+  DEFAULTED
+  CANCELLED_BEFORE_START
+}
+
+enum PaymentMethodState {
+  AUTHORIZING
+  ACTIVE
+  FAILED
+  EXPIRED
+  SUSPENDED
+  CANCELLED
+  REPLACED
+}
+
+enum CycleState {
+  SCHEDULED
+  COLLECTING
+  OVERDUE
+  BLOCKED_BY_DEFAULT
+  READY_FOR_PAYOUT
+  PAYOUT_PROCESSING
+  COMPLETED
+}
+
+enum ContributionState {
+  SCHEDULED
+  CHARGE_PENDING
+  PAID
+  FAILED_RETRYABLE
+  MANUAL_PAYMENT_REQUIRED
+  OVERDUE
+  DEFAULTED
+  REVERSED
+}
+
+enum PayoutState {
+  READY
+  PROCESSING
+  PENDING_AUTHORIZATION
+  IN_PROGRESS
+  SUCCESSFUL
+  FAILED
+  REVERSED
+  EXPIRED
+}
+
+enum ProviderOperationState {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED_RETRYABLE
+  FAILED_TERMINAL
+  REVERSED
+  EXPIRED
+  UNKNOWN
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum PayoutTiming {
+  IMMEDIATE_WHEN_READY
+  SCHEDULED_WHEN_READY
+}
+
+enum CardSetupPolicy {
+  COMMITMENT_DEPOSIT
+  FIRST_CONTRIBUTION
+  SANDBOX_SIMULATION
+}
+
+enum PaymentMethodType {
+  CARD_TOKEN
+  DIRECT_DEBIT
+}
+
+enum PaymentAttemptType {
+  CARD_SETUP
+  CARD_TOKEN_CHARGE
+  DIRECT_DEBIT
+  MANUAL_CHECKOUT
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EXPENSE
+  RECEIVABLE
+  CLEARING
+}
+
+enum LedgerSide {
+  DEBIT
+  CREDIT
+}
+
+enum ReservationState {
+  RESERVED
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum ChatMembershipState {
+  ACTIVE
+  LEFT
+  BANNED
+  UNKNOWN
+}
+
+enum TelegramChatType {
+  GROUP
+  SUPERGROUP
+  CHANNEL
+}
+
+enum TelegramRole {
+  MEMBER
+  ADMINISTRATOR
+  CREATOR
+  RESTRICTED
+  LEFT
+  KICKED
+  UNKNOWN
+}
+
+enum BankAccountState {
+  PENDING_VERIFICATION
+  VERIFIED
+  INVALID
+  REPLACED
+}
+
+enum NotificationState {
+  PENDING
+  SENT
+  FAILED_RETRYABLE
+  FAILED_TERMINAL
+}
+
+enum LaunchTokenState {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  REVOKED
+}
+
+model User {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  createdAt            DateTime                    @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @db.Timestamptz(6)
+  telegramIdentities   TelegramIdentity[]
+  chatMemberships      TelegramChatMembership[]
+  createdCollages      Collage[]                   @relation("CollageCreator")
+  collageMemberships   CollageMember[]
+  positionReservations PayoutPositionReservation[]
+  otpChallenges        OtpChallenge[]
+  launchTokens         LaunchToken[]
+
+  @@map("users")
+}
+
+model TelegramIdentity {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  telegramUserId String   @unique @db.VarChar(32)
+  username       String?  @db.VarChar(64)
+  firstName      String?  @db.VarChar(128)
+  lastName       String?  @db.VarChar(128)
+  languageCode   String?  @db.VarChar(16)
+  isBot          Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("telegram_identities")
+}
+
+model TelegramChat {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  telegramChatId        String                   @unique @db.VarChar(32)
+  type                  TelegramChatType
+  title                 String                   @db.VarChar(255)
+  username              String?                  @db.VarChar(64)
+  botCanPinMessages     Boolean                  @default(false)
+  pinnedStatusMessageId String?                  @db.VarChar(32)
+  createdAt             DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime                 @updatedAt @db.Timestamptz(6)
+  memberships           TelegramChatMembership[]
+  collages              Collage[]
+  launchTokens          LaunchToken[]
+
+  @@map("telegram_chats")
+}
+
+model TelegramChatMembership {
+  id         String              @id @default(uuid()) @db.Uuid
+  chatId     String              @db.Uuid
+  userId     String              @db.Uuid
+  role       TelegramRole        @default(UNKNOWN)
+  state      ChatMembershipState @default(UNKNOWN)
+  joinedAt   DateTime?           @db.Timestamptz(6)
+  leftAt     DateTime?           @db.Timestamptz(6)
+  lastSeenAt DateTime            @default(now()) @db.Timestamptz(6)
+  createdAt  DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime            @updatedAt @db.Timestamptz(6)
+  chat       TelegramChat        @relation(fields: [chatId], references: [id], onDelete: Restrict)
+  user       User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([chatId, userId])
+  @@index([userId, state])
+  @@map("telegram_chat_memberships")
+}
+
+model Collage {
+  id                         String                      @id @default(uuid()) @db.Uuid
+  chatId                     String                      @db.Uuid
+  creatorUserId              String                      @db.Uuid
+  state                      CollageState                @default(DRAFT)
+  name                       String                      @db.VarChar(120)
+  description                String                      @db.VarChar(1000)
+  currency                   String                      @default("NGN") @db.Char(3)
+  contributionAmountMinor    BigInt
+  participantLimit           Int
+  frequency                  Frequency
+  frequencyInterval          Int                         @default(1)
+  timezone                   String                      @db.VarChar(64)
+  firstCycleStartAt          DateTime                    @db.Timestamptz(6)
+  cycleDeadlineOffsetMinutes Int
+  gracePeriodMinutes         Int
+  reminderRule               Json?
+  payoutTiming               PayoutTiming
+  cardSetupPolicy            CardSetupPolicy
+  cardSetupAmountMinor       BigInt
+  currentRuleVersion         Int                         @default(1)
+  version                    Int                         @default(0)
+  rulesLockedAt              DateTime?                   @db.Timestamptz(6)
+  startedAt                  DateTime?                   @db.Timestamptz(6)
+  completedAt                DateTime?                   @db.Timestamptz(6)
+  createdAt                  DateTime                    @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime                    @updatedAt @db.Timestamptz(6)
+  chat                       TelegramChat                @relation(fields: [chatId], references: [id], onDelete: Restrict)
+  creator                    User                        @relation("CollageCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  ruleVersions               CollageRuleVersion[]
+  members                    CollageMember[]
+  positionReservations       PayoutPositionReservation[]
+  cycles                     Cycle[]
+  ledgerAccounts             LedgerAccount[]
+  launchTokens               LaunchToken[]
+
+  @@index([chatId, state])
+  @@index([creatorUserId])
+  @@map("collages")
+}
+
+model CollageRuleVersion {
+  id                String          @id @default(uuid()) @db.Uuid
+  collageId         String          @db.Uuid
+  version           Int
+  deterministicHash String          @db.Char(64)
+  rules             Json
+  createdByUserId   String          @db.Uuid
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  lockedAt          DateTime?       @db.Timestamptz(6)
+  collage           Collage         @relation(fields: [collageId], references: [id], onDelete: Restrict)
+  acceptedByMembers CollageMember[]
+
+  @@unique([collageId, version])
+  @@unique([collageId, deterministicHash])
+  @@map("collage_rule_versions")
+}
+
+model CollageMember {
+  id                         String              @id @default(uuid()) @db.Uuid
+  collageId                  String              @db.Uuid
+  userId                     String              @db.Uuid
+  telegramUserId             String              @db.VarChar(32)
+  state                      MemberState         @default(NOT_STARTED)
+  payoutPosition             Int?
+  acceptedRuleVersionId      String?             @db.Uuid
+  legalNameEncrypted         String?
+  ninEncrypted               String?
+  ninHash                    String?             @db.Char(64)
+  phoneEncrypted             String?
+  phoneHash                  String?             @db.Char(64)
+  phoneVerifiedAt            DateTime?           @db.Timestamptz(6)
+  identityVerifiedAt         DateTime?           @db.Timestamptz(6)
+  identityVerificationMode   String?             @db.VarChar(32)
+  preferredChargeRule        Json?
+  recurringConsentAt         DateTime?           @db.Timestamptz(6)
+  registeredAt               DateTime?           @db.Timestamptz(6)
+  telegramLeftAt             DateTime?           @db.Timestamptz(6)
+  outstandingObligationMinor BigInt              @default(0)
+  version                    Int                 @default(0)
+  createdAt                  DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime            @updatedAt @db.Timestamptz(6)
+  collage                    Collage             @relation(fields: [collageId], references: [id], onDelete: Restrict)
+  user                       User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  acceptedRuleVersion        CollageRuleVersion? @relation(fields: [acceptedRuleVersionId], references: [id], onDelete: Restrict)
+  bankAccounts               BankAccount[]
+  paymentMethods             PaymentMethod[]
+  cycleContributions         CycleContribution[]
+  payouts                    Payout[]
+  recipientCycles            Cycle[]             @relation("CycleRecipient")
+
+  @@unique([collageId, userId])
+  @@unique([collageId, telegramUserId])
+  @@unique([collageId, payoutPosition])
+  @@index([collageId, state])
+  @@map("collage_members")
+}
+
+model PayoutPositionReservation {
+  id        String           @id @default(uuid()) @db.Uuid
+  collageId String           @db.Uuid
+  userId    String           @db.Uuid
+  position  Int
+  state     ReservationState @default(RESERVED)
+  expiresAt DateTime         @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(6)
+  collage   Collage          @relation(fields: [collageId], references: [id], onDelete: Restrict)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([collageId, position, state])
+  @@index([expiresAt, state])
+  @@map("payout_position_reservations")
+}
+
+model OtpChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  purpose     String    @db.VarChar(64)
+  targetHash  String    @db.Char(64)
+  codeHash    String    @db.Char(64)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime  @db.Timestamptz(6)
+  consumedAt  DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, purpose, expiresAt])
+  @@map("otp_challenges")
+}
+
+model BankAccount {
+  id                     String           @id @default(uuid()) @db.Uuid
+  memberId               String           @db.Uuid
+  bankCode               String           @db.VarChar(16)
+  bankName               String           @db.VarChar(128)
+  accountNumberEncrypted String
+  accountNumberHash      String           @db.Char(64)
+  accountNameEncrypted   String
+  maskedAccountNumber    String           @db.VarChar(32)
+  state                  BankAccountState @default(PENDING_VERIFICATION)
+  isDefault              Boolean          @default(false)
+  verifiedAt             DateTime?        @db.Timestamptz(6)
+  replacedAt             DateTime?        @db.Timestamptz(6)
+  createdAt              DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime         @updatedAt @db.Timestamptz(6)
+  member                 CollageMember    @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  payouts                Payout[]
+
+  @@unique([memberId, accountNumberHash])
+  @@index([memberId, state])
+  @@map("bank_accounts")
+}
+
+model PaymentMethod {
+  id                        String               @id @default(uuid()) @db.Uuid
+  memberId                  String               @db.Uuid
+  type                      PaymentMethodType
+  state                     PaymentMethodState   @default(AUTHORIZING)
+  provider                  String               @default("MONNIFY") @db.VarChar(32)
+  providerCustomerReference String?              @db.VarChar(128)
+  credentialEncrypted       String?
+  credentialHash            String?              @db.Char(64)
+  maskedLabel               String?              @db.VarChar(64)
+  activeAt                  DateTime?            @db.Timestamptz(6)
+  replacedAt                DateTime?            @db.Timestamptz(6)
+  expiresAt                 DateTime?            @db.Timestamptz(6)
+  createdAt                 DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime             @updatedAt @db.Timestamptz(6)
+  member                    CollageMember        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  cardAuthorizations        CardAuthorization[]
+  directDebitMandates       DirectDebitMandate[]
+
+  @@index([memberId, state])
+  @@map("payment_methods")
+}
+
+model CardAuthorization {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  paymentMethodId    String                 @db.Uuid
+  setupAmountMinor   BigInt
+  currency           String                 @default("NGN") @db.Char(3)
+  idempotencyKey     String                 @unique @db.VarChar(191)
+  providerReference  String?                @db.VarChar(191)
+  state              ProviderOperationState @default(CREATED)
+  reusableTokenReady Boolean                @default(false)
+  expiresAt          DateTime?              @db.Timestamptz(6)
+  createdAt          DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime               @updatedAt @db.Timestamptz(6)
+  paymentMethod      PaymentMethod          @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@unique([providerReference])
+  @@index([paymentMethodId, state])
+  @@map("card_authorizations")
+}
+
+model DirectDebitMandate {
+  id                        String                 @id @default(uuid()) @db.Uuid
+  paymentMethodId           String                 @db.Uuid
+  mandateReference          String                 @unique @db.VarChar(191)
+  providerMandateId         String?                @unique @db.VarChar(191)
+  authorizationUrlEncrypted String?
+  mandateDataEncrypted      String?
+  state                     ProviderOperationState @default(CREATED)
+  activatedAt               DateTime?              @db.Timestamptz(6)
+  expiresAt                 DateTime?              @db.Timestamptz(6)
+  createdAt                 DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime               @updatedAt @db.Timestamptz(6)
+  paymentMethod             PaymentMethod          @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@index([paymentMethodId, state])
+  @@map("direct_debit_mandates")
+}
+
+model Cycle {
+  id                   String              @id @default(uuid()) @db.Uuid
+  collageId            String              @db.Uuid
+  number               Int
+  recipientMemberId    String              @db.Uuid
+  state                CycleState          @default(SCHEDULED)
+  expectedAmountMinor  BigInt
+  confirmedAmountMinor BigInt              @default(0)
+  opensAt              DateTime            @db.Timestamptz(6)
+  deadlineAt           DateTime            @db.Timestamptz(6)
+  graceEndsAt          DateTime            @db.Timestamptz(6)
+  payoutScheduledAt    DateTime?           @db.Timestamptz(6)
+  completedAt          DateTime?           @db.Timestamptz(6)
+  version              Int                 @default(0)
+  createdAt            DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(6)
+  collage              Collage             @relation(fields: [collageId], references: [id], onDelete: Restrict)
+  recipient            CollageMember       @relation("CycleRecipient", fields: [recipientMemberId], references: [id], onDelete: Restrict)
+  contributions        CycleContribution[]
+  payout               Payout?
+
+  @@unique([collageId, number])
+  @@index([collageId, state])
+  @@map("cycles")
+}
+
+model CycleContribution {
+  id              String            @id @default(uuid()) @db.Uuid
+  cycleId         String            @db.Uuid
+  memberId        String            @db.Uuid
+  amountMinor     BigInt
+  currency        String            @default("NGN") @db.Char(3)
+  state           ContributionState @default(SCHEDULED)
+  chargeAt        DateTime          @db.Timestamptz(6)
+  paidAt          DateTime?         @db.Timestamptz(6)
+  version         Int               @default(0)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(6)
+  cycle           Cycle             @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  member          CollageMember     @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  paymentAttempts PaymentAttempt[]
+
+  @@unique([cycleId, memberId])
+  @@index([cycleId, state])
+  @@map("cycle_contributions")
+}
+
+model PaymentAttempt {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  contributionId           String                 @db.Uuid
+  type                     PaymentAttemptType
+  provider                 String                 @default("MONNIFY") @db.VarChar(32)
+  providerEnvironment      String                 @db.VarChar(16)
+  providerReference        String                 @db.VarChar(191)
+  idempotencyKey           String                 @unique @db.VarChar(191)
+  amountMinor              BigInt
+  currency                 String                 @default("NGN") @db.Char(3)
+  state                    ProviderOperationState @default(CREATED)
+  providerPayloadEncrypted String?
+  initiatedAt              DateTime?              @db.Timestamptz(6)
+  resolvedAt               DateTime?              @db.Timestamptz(6)
+  createdAt                DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime               @updatedAt @db.Timestamptz(6)
+  contribution             CycleContribution      @relation(fields: [contributionId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerEnvironment, providerReference])
+  @@index([contributionId, state])
+  @@map("payment_attempts")
+}
+
+model Payout {
+  id             String          @id @default(uuid()) @db.Uuid
+  cycleId        String          @unique @db.Uuid
+  memberId       String          @db.Uuid
+  bankAccountId  String          @db.Uuid
+  amountMinor    BigInt
+  currency       String          @default("NGN") @db.Char(3)
+  state          PayoutState     @default(READY)
+  idempotencyKey String          @unique @db.VarChar(191)
+  version        Int             @default(0)
+  completedAt    DateTime?       @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  cycle          Cycle           @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  member         CollageMember   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  bankAccount    BankAccount     @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  attempts       PayoutAttempt[]
+
+  @@index([memberId, state])
+  @@map("payouts")
+}
+
+model PayoutAttempt {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  payoutId                 String                 @db.Uuid
+  provider                 String                 @default("MONNIFY") @db.VarChar(32)
+  providerEnvironment      String                 @db.VarChar(16)
+  providerReference        String                 @db.VarChar(191)
+  idempotencyKey           String                 @unique @db.VarChar(191)
+  state                    ProviderOperationState @default(CREATED)
+  providerPayloadEncrypted String?
+  initiatedAt              DateTime?              @db.Timestamptz(6)
+  resolvedAt               DateTime?              @db.Timestamptz(6)
+  createdAt                DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime               @updatedAt @db.Timestamptz(6)
+  payout                   Payout                 @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerEnvironment, providerReference])
+  @@index([payoutId, state])
+  @@map("payout_attempts")
+}
+
+model LedgerAccount {
+  id        String            @id @default(uuid()) @db.Uuid
+  collageId String?           @db.Uuid
+  key       String            @unique @db.VarChar(191)
+  code      String            @db.VarChar(64)
+  name      String            @db.VarChar(128)
+  type      LedgerAccountType
+  currency  String            @default("NGN") @db.Char(3)
+  createdAt DateTime          @default(now()) @db.Timestamptz(6)
+  collage   Collage?          @relation(fields: [collageId], references: [id], onDelete: Restrict)
+  entries   LedgerEntry[]
+
+  @@index([collageId, code])
+  @@map("ledger_accounts")
+}
+
+model LedgerTransaction {
+  id             String             @id @default(uuid()) @db.Uuid
+  idempotencyKey String             @unique @db.VarChar(191)
+  correlationId  String             @db.VarChar(191)
+  referenceType  String             @db.VarChar(64)
+  referenceId    String             @db.VarChar(191)
+  description    String             @db.VarChar(500)
+  currency       String             @default("NGN") @db.Char(3)
+  reversalOfId   String?            @unique @db.Uuid
+  createdAt      DateTime           @default(now()) @db.Timestamptz(6)
+  reversalOf     LedgerTransaction? @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy     LedgerTransaction? @relation("LedgerReversal")
+  entries        LedgerEntry[]
+
+  @@index([referenceType, referenceId])
+  @@index([correlationId])
+  @@map("ledger_transactions")
+}
+
+model LedgerEntry {
+  id            String            @id @default(uuid()) @db.Uuid
+  transactionId String            @db.Uuid
+  accountId     String            @db.Uuid
+  side          LedgerSide
+  amountMinor   BigInt
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  transaction   LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account       LedgerAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([transactionId])
+  @@map("ledger_entries")
+}
+
+model WebhookEvent {
+  id                  String    @id @default(uuid()) @db.Uuid
+  provider            String    @db.VarChar(32)
+  providerEnvironment String    @db.VarChar(16)
+  providerEventId     String?   @db.VarChar(191)
+  fingerprint         String    @db.Char(64)
+  eventType           String?   @db.VarChar(128)
+  signatureValid      Boolean
+  payloadEncrypted    String
+  receivedAt          DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt         DateTime? @db.Timestamptz(6)
+  processingErrorCode String?   @db.VarChar(128)
+
+  @@unique([provider, providerEnvironment, fingerprint])
+  @@unique([provider, providerEnvironment, providerEventId])
+  @@index([processedAt, receivedAt])
+  @@map("webhook_events")
+}
+
+model OutboxEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  eventType        String    @db.VarChar(128)
+  aggregateType    String    @db.VarChar(64)
+  aggregateId      String    @db.VarChar(191)
+  aggregateVersion Int
+  schemaVersion    Int       @default(1)
+  correlationId    String    @db.VarChar(191)
+  causationId      String?   @db.VarChar(191)
+  payload          Json
+  occurredAt       DateTime  @default(now()) @db.Timestamptz(6)
+  publishedAt      DateTime? @db.Timestamptz(6)
+  publishAttempts  Int       @default(0)
+  lastErrorCode    String?   @db.VarChar(128)
+
+  @@index([publishedAt, occurredAt])
+  @@index([aggregateType, aggregateId, aggregateVersion])
+  @@map("outbox_events")
+}
+
+model NotificationDelivery {
+  id                String            @id @default(uuid()) @db.Uuid
+  idempotencyKey    String            @unique @db.VarChar(191)
+  eventId           String            @db.Uuid
+  channel           String            @db.VarChar(32)
+  destinationHash   String            @db.Char(64)
+  template          String            @db.VarChar(128)
+  templateVersion   Int
+  state             NotificationState @default(PENDING)
+  providerMessageId String?           @db.VarChar(191)
+  attemptCount      Int               @default(0)
+  sentAt            DateTime?         @db.Timestamptz(6)
+  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@index([eventId, state])
+  @@map("notification_deliveries")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorType     String   @db.VarChar(32)
+  actorId       String?  @db.VarChar(191)
+  action        String   @db.VarChar(128)
+  entityType    String   @db.VarChar(64)
+  entityId      String   @db.VarChar(191)
+  correlationId String   @db.VarChar(191)
+  source        String   @db.VarChar(64)
+  safeMetadata  Json
+  occurredAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([correlationId])
+  @@map("audit_logs")
+}
+
+model LaunchToken {
+  id         String           @id @default(uuid()) @db.Uuid
+  tokenHash  String           @unique @db.Char(64)
+  userId     String?          @db.Uuid
+  collageId  String?          @db.Uuid
+  chatId     String?          @db.Uuid
+  action     String           @db.VarChar(64)
+  state      LaunchTokenState @default(ACTIVE)
+  singleUse  Boolean          @default(true)
+  expiresAt  DateTime         @db.Timestamptz(6)
+  consumedAt DateTime?        @db.Timestamptz(6)
+  createdAt  DateTime         @default(now()) @db.Timestamptz(6)
+  user       User?            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  collage    Collage?         @relation(fields: [collageId], references: [id], onDelete: Restrict)
+  chat       TelegramChat?    @relation(fields: [chatId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt, state])
+  @@map("launch_tokens")
+}

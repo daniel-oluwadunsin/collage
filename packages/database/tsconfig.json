@@ -2,8 +2,8 @@
   "extends": "@collage/typescript-config/node.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "."
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["dist", "generated", "node_modules", "src/**/*.test.ts"]
+  "include": ["src/**/*.ts", "generated/client/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
 }

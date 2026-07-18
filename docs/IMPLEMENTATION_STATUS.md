@@ -42,20 +42,20 @@ These belong to later milestones and must not be inferred from scaffolding.
 
 The command outcomes in this section are updated only after execution.
 
-| Command | Result |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | Pass |
-| `pnpm db:generate` | Pass — Prisma 7.8 client generated |
-| `pnpm format:check` | Pass |
-| `pnpm lint` | Pass — 19 Turbo tasks |
-| `pnpm typecheck` | Pass — 19 Turbo tasks |
-| `pnpm test` | Pass — API, bot, and worker health suites |
-| `pnpm test:integration` | Pass — application health integration suites |
-| `pnpm test:e2e` | Pass; visual browser evidence recorded separately below |
-| `pnpm build` | Pass — 15 Turbo build tasks |
-| Application Docker image builds | Pass — API, bot, worker, Mini App |
-| `docker compose config --quiet` | Pass |
-| Docker Compose smoke | Pass — all six long-running services healthy |
+| Command                          | Result                                                  |
+| -------------------------------- | ------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Pass                                                    |
+| `pnpm db:generate`               | Pass — Prisma 7.8 client generated                      |
+| `pnpm format:check`              | Pass                                                    |
+| `pnpm lint`                      | Pass — 19 Turbo tasks                                   |
+| `pnpm typecheck`                 | Pass — 19 Turbo tasks                                   |
+| `pnpm test`                      | Pass — API, bot, and worker health suites               |
+| `pnpm test:integration`          | Pass — application health integration suites            |
+| `pnpm test:e2e`                  | Pass; visual browser evidence recorded separately below |
+| `pnpm build`                     | Pass — 15 Turbo build tasks                             |
+| Application Docker image builds  | Pass — API, bot, worker, Mini App                       |
+| `docker compose config --quiet`  | Pass                                                    |
+| Docker Compose smoke             | Pass — all six long-running services healthy            |
 
 ### Browser evidence
 
@@ -80,6 +80,79 @@ The production Mini App was inspected in a browser at 390×844 compact and
 
 ## Prompt 2 entry criteria
 
-Prompt 2 may begin when the verification table is green. It should implement the
-database/foundation milestone only, preserve the package boundaries, and treat
-every financial invariant in the architecture and risk documents as binding.
+Prompt 2 entry criteria were satisfied.
+
+## Milestone 2 — shared financial foundation
+
+Status: complete.
+
+### Delivered
+
+- [x] Pure, exhaustive Collage/member/payment-method/cycle/contribution/payout
+      state machines.
+- [x] Integer-minor-unit money helpers and lossless BigInt DTO serialization.
+- [x] Timezone-aware daily, weekly, monthly, and yearly schedule generation,
+      including constrained month/year dates and preferred charge rules.
+- [x] Full Prisma MVP schema for identity, Telegram chats, Collages, immutable
+      rules, registrations, payment methods, cycles, contributions, payouts,
+      provider attempts, ledger, webhook inbox, outbox, notifications, audit,
+      OTP, reservations, and launch tokens.
+- [x] PostgreSQL migrations with partial unique indexes, lifecycle/money checks,
+      deferred balanced-ledger enforcement, and append-only audit/ledger
+      triggers.
+- [x] Prisma PostgreSQL adapter, serializable transaction helper, bounded
+      serialization/deadlock retry, advisory locks, and fixed-table row locks.
+- [x] Repositories for payout-position reservation, registration and
+      exactly-once start request, safe payment-method replacement, strict payout
+      eligibility/retry, and Telegram departure obligations.
+- [x] Append-only balanced double-entry ledger with idempotent posting and
+      compensating reversal support.
+- [x] Transactional audit and outbox append, locked batch claim, publish
+      acknowledgement, and safe failure recording.
+- [x] Redis/BullMQ connection and queue factories, validated payloads, bounded
+      retries, and opaque deterministic job IDs.
+- [x] Strict application environment schemas with provider calls disabled by
+      default.
+- [x] Pino credential/identity redaction.
+- [x] AES-256-GCM versioned envelopes with AAD, keyed SHA-256 hashes,
+      replay-resistant internal request authentication, Telegram init-data
+      verification, and opaque launch-token issuance/consumption.
+- [x] Secret-free environment placeholders and configurable local Compose
+      PostgreSQL/Redis ports.
+- [x] Safe, idempotent local seed fixture containing no real personal or
+      financial credentials.
+- [x] Pure unit tests and real PostgreSQL integration/concurrency tests.
+
+### Explicitly still out of scope
+
+- Telegram Bot API calls, update handlers, and webhook setup.
+- Monnify HTTP calls, webhook interpretation, charge or payout execution.
+- Production identity/OTP provider integration.
+- Outbox workers and provider-specific processors.
+- Registration, contribution, and payout HTTP/UI flows.
+- Production custody, settlement, MFA, compliance, and legal enablement.
+
+No test or fixture marks money paid from a redirect, invents a provider success,
+or calls Telegram or Monnify.
+
+## Milestone 2 verification evidence
+
+The final command table is updated only from commands actually executed.
+
+| Command                                        | Result                             |
+| ---------------------------------------------- | ---------------------------------- |
+| `pnpm install --frozen-lockfile`               | Pass                               |
+| `pnpm db:generate`                             | Pass — Prisma 7.8 client generated |
+| `prisma migrate deploy` against `collage_test` | Pass — two migrations              |
+| Safe seed fixture                              | Pass against local `collage`       |
+| `pnpm format:check`                            | Pass                               |
+| `pnpm lint`                                    | Pass — 21 Turbo tasks              |
+| `pnpm typecheck`                               | Pass — 21 Turbo tasks              |
+| Shared package unit tests                      | Pass — 24 tests                    |
+| PostgreSQL foundation/integration tests        | Pass — 4 tests                     |
+| Application health tests                       | Pass — 3 tests                     |
+| `pnpm test`                                    | Pass — 31 tests, none skipped      |
+| `pnpm test:integration`                        | Pass — database and apps           |
+| `pnpm build`                                   | Pass — 15 Turbo tasks              |
+| `docker compose config --quiet`                | Pass                               |
+| Migration image build                          | Pass — foundation image            |

@@ -24,16 +24,23 @@ LOG_LEVEL=debug
 DATABASE_URL=postgresql://collage:collage@postgres:5432/collage
 REDIS_URL=redis://redis:6379
 
+APP_ENCRYPTION_KEY_ID=
 APP_ENCRYPTION_KEY_BASE64=
 APP_HASH_PEPPER=
 INTERNAL_SERVICE_TOKEN=
+LAUNCH_TOKEN_HASH_SECRET=
+PROVIDER_CALLS_ENABLED=false
 
 PUBLIC_APP_URL=https://example.ng
 API_PUBLIC_URL=https://api.example.ng
 MINI_APP_PUBLIC_URL=https://app.example.ng
 ```
 
-`APP_ENCRYPTION_KEY_BASE64` must decode to the exact key length required by the implementation.
+`APP_ENCRYPTION_KEY_BASE64` must decode to exactly 32 bytes.
+`APP_HASH_PEPPER`, `INTERNAL_SERVICE_TOKEN`, and
+`LAUNCH_TOKEN_HASH_SECRET` must each be independently generated with at least
+32 bytes of entropy. `PROVIDER_CALLS_ENABLED` remains `false` until provider
+enablement is approved.
 
 ### 2.2 API
 

@@ -1,3 +1,5 @@
+export * from "./init-data.js";
+
 const htmlEscapes: Readonly<Record<string, string>> = {
   "&": "&amp;",
   "<": "&lt;",

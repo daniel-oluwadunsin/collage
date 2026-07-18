@@ -66,3 +66,87 @@
 - Decision: do not install Zustand yet.
 - Reason: the architecture permits it only when cross-route ephemeral state is
   clearly justified. The boot page does not need a global client store.
+
+## D-009 — PostgreSQL is a second invariant boundary
+
+- Date: 2026-07-18
+- Decision: encode concurrency-sensitive and financial invariants in raw SQL
+  constraints, partial indexes, deferred triggers, and append-only triggers in
+  addition to domain/repository checks.
+- Reason: application validation alone cannot arbitrate races or protect
+  financial history from another code path.
+
+## D-010 — One current Collage excludes drafts and terminal history
+
+- Date: 2026-07-18
+- Decision: the one-current-Collage partial index covers `REGISTRATION_OPEN`,
+  `STARTING`, `ACTIVE`, `BLOCKED`, and `SUSPENDED`; it excludes `DRAFT`,
+  `COMPLETED`, and `CANCELLED`.
+- Reason: a chat may retain drafts and terminal history, but cannot have two
+  operational Collages.
+
+## D-011 — BigInt crosses APIs as a decimal string
+
+- Date: 2026-07-18
+- Decision: store and calculate money as BigInt minor units and serialize every
+  BigInt DTO field as a base-10 string.
+- Reason: JSON has no BigInt representation and JavaScript numbers cannot
+  losslessly represent all PostgreSQL `BIGINT` values.
+
+## D-012 — Calendar schedule overflow is constrained
+
+- Date: 2026-07-18
+- Decision: daily/weekly schedules add fixed calendar units in the Collage
+  timezone; monthly/yearly schedules preserve local wall time and constrain
+  invalid dates to the last valid day.
+- Reason: this makes dates such as January 31 and February 29 deterministic
+  without silently shifting into a later month.
+
+## D-013 — Last registration emits one start request
+
+- Date: 2026-07-18
+- Decision: under a Collage row lock, the last valid registration changes
+  `REGISTRATION_OPEN` to `STARTING`, locks rules, records `startedAt`, and writes
+  one versioned outbox event in the same transaction.
+- Reason: generating cycles or performing side effects inline would enlarge the
+  contention window. The unique state update and outbox key make start
+  exactly-once at the aggregate boundary while downstream delivery remains
+  at-least-once and idempotent.
+
+## D-014 — Safe payment-method cutover
+
+- Date: 2026-07-18
+- Decision: an authorizing replacement does not deactivate the current method.
+  After credential activation and only when no charge is unresolved, one
+  serializable transaction marks the old method `REPLACED` before activating
+  the new method.
+- Reason: failed setup must not leave a member without a usable method, and the
+  partial index prevents two active methods.
+
+## D-015 — Versioned authenticated encryption
+
+- Date: 2026-07-18
+- Decision: sensitive values use AES-256-GCM envelopes containing version and
+  key ID, with entity/field context supplied as additional authenticated data.
+  Equality lookup uses a separate keyed SHA-256 hash.
+- Reason: random nonces prevent ciphertext correlation, AAD prevents
+  cross-field substitution, key IDs permit rotation, and keyed hashes avoid
+  exposing low-entropy identifiers to offline rainbow tables.
+
+## D-016 — Internal requests and launch tokens are replay resistant
+
+- Date: 2026-07-18
+- Decision: internal service requests sign method, path, body hash, service,
+  timestamp, and random nonce; verification requires a replay-store claim.
+  Mini App launch tokens contain 256 random bits and only keyed hashes are
+  persisted.
+- Reason: bearer reuse and database token disclosure should not grant durable
+  access. Production must back the replay-store interface with shared Redis.
+
+## D-017 — Queue IDs contain no business identifiers
+
+- Date: 2026-07-18
+- Decision: deterministic BullMQ IDs combine a safe operation name with a
+  truncated SHA-256 digest of canonical identity parts and never use `:`.
+- Reason: BullMQ reserves colons in custom IDs, and raw references can leak
+  provider or customer identifiers into queue metadata.

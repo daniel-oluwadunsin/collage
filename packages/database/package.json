@@ -5,25 +5,36 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "test:integration": "node --import tsx --test src/**/*.integration.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@collage/domain": "workspace:*",
+    "@collage/security": "workspace:*",
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "pg": "8.16.3"
   },
   "devDependencies": {
     "@collage/eslint-config": "workspace:*",
     "@collage/typescript-config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "8.15.6",
     "eslint": "catalog:",
     "prisma": "7.8.0",
+    "tsx": "4.21.0",
     "typescript": "catalog:"
   }
 }

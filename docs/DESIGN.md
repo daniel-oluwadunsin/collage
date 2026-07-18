@@ -69,7 +69,7 @@ pending remain separate semantic tokens and never rely on color alone.
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 18px;
-  --shadow-raised: 0 14px 36px rgb(16 24 40 / 0.10);
+  --shadow-raised: 0 14px 36px rgb(16 24 40 / 0.1);
 }
 
 [data-theme="dark"] {
@@ -300,4 +300,3 @@ The design-system boot page must visibly demonstrate:
 
 It is a component/state reference only. It must not call Monnify, Telegram, a
 database, or claim that a business operation has completed.
-

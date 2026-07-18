@@ -80,11 +80,11 @@ Use CSS variables compatible with Tailwind and shadcn/ui.
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: 220 98% 47%;          /* #0357EE */
+  --primary: 220 98% 47%; /* #0357EE */
   --primary-foreground: 0 0% 100%;
   --primary-soft: 219 100% 96%;
 
-  --brand-yellow: 44 100% 68%;     /* #FFD85C */
+  --brand-yellow: 44 100% 68%; /* #FFD85C */
   --brand-yellow-foreground: 222 47% 11%;
   --brand-yellow-soft: 45 100% 94%;
 

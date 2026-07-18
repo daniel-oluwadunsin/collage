@@ -7,7 +7,11 @@ Consulted on: 2026-07-18
 - [Telegram Mini Apps](https://core.telegram.org/bots/webapps) — official
   reference for `themeParams`, `colorScheme`, `ready()`, BackButton,
   `safeAreaInset`, `contentSafeAreaInset`, compact launch mode, and fullscreen
-  capability. Used only to normalize the design and webview constraints.
+  capability. The validating data received via the Mini App section was
+  re-consulted for the foundation: remove `hash`, sort remaining fields, join
+  them with newlines, derive the `WebAppData` HMAC secret from the bot token,
+  compare the SHA-256 HMAC in constant time, and independently enforce
+  `auth_date` freshness. No Telegram network call was made.
 
 ## Monnify
 

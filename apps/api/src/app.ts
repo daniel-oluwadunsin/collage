@@ -304,6 +304,20 @@ export const createApiApp = (options: ApiAppOptions = {}): Express => {
         { error, requestId: request.requestId },
         "API request failed",
       );
+    } else if (
+      request.path.endsWith("/auth/telegram/bootstrap") &&
+      apiError.status >= 400
+    ) {
+      request.log.warn(
+        {
+          code: apiError.code,
+          method: request.method,
+          path: request.path,
+          requestId: request.requestId,
+          status: apiError.status,
+        },
+        "Telegram bootstrap rejected",
+      );
     }
     response.status(apiError.status).json({
       success: false,

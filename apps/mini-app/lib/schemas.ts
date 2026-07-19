@@ -104,6 +104,7 @@ export const registrationSchema = z.union([
           type: z.string(),
           state: z.string(),
           maskedLabel: z.string().nullable(),
+          authorizationId: z.string().nullable().optional(),
         }),
       )
       .optional(),

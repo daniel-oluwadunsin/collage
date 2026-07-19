@@ -7,6 +7,7 @@ import {
   type createRedisConnection,
   type TelegramNotificationJob,
 } from "@collage/queue";
+import { buildTelegramMiniAppLink } from "@collage/telegram";
 import { InlineKeyboard, type Api, type Bot } from "grammy";
 
 import type { InternalTelegramApi } from "./internal-api.js";
@@ -80,8 +81,63 @@ const deliver = async (
   api: Api,
   internalApi: InternalTelegramApi,
   job: TelegramNotificationJob,
+  botUsername: string,
 ): Promise<void> => {
-  const markup = keyboard(job.buttons);
+  if (job.operation === "refresh-status-card") {
+    const card = await internalApi.getStatusCard(job.telegramChatId);
+    const markup = card.buttons.length === 0 ? undefined : new InlineKeyboard();
+    for (const button of card.buttons) {
+      markup?.url(
+        button.label,
+        "startAppToken" in button
+          ? buildTelegramMiniAppLink({
+              botUsername,
+              startAppToken: button.startAppToken,
+              mode: "compact",
+            })
+          : button.url,
+      );
+      markup?.row();
+    }
+    const sent = await api.sendMessage(job.telegramChatId, card.text, {
+      parse_mode: card.parseMode,
+      link_preview_options: { is_disabled: true },
+      ...(markup === undefined ? {} : { reply_markup: markup }),
+    });
+    if (card.pin) {
+      await api.pinChatMessage(job.telegramChatId, sent.message_id, {
+        disable_notification: true,
+      });
+      await internalApi.recordPinned({
+        telegramChatId: job.telegramChatId,
+        messageId: String(sent.message_id),
+      });
+    }
+    return;
+  }
+  const actionToken =
+    job.actionButton === undefined
+      ? undefined
+      : await internalApi.createLaunchToken({
+          action: job.actionButton.action,
+          chatId: job.actionButton.chatId,
+          collageId: job.actionButton.collageId,
+        });
+  const markup = keyboard([
+    ...job.buttons,
+    ...(job.actionButton === undefined || actionToken === undefined
+      ? []
+      : [
+          {
+            label: job.actionButton.label,
+            url: buildTelegramMiniAppLink({
+              botUsername,
+              startAppToken: actionToken.token,
+              mode: "compact",
+            }),
+          },
+        ]),
+  ]);
   const common = {
     parse_mode: job.parseMode,
     link_preview_options: { is_disabled: true },
@@ -113,6 +169,7 @@ const deliver = async (
 
 export const createTelegramNotificationWorker = (options: {
   readonly bot: Bot;
+  readonly botUsername: string;
   readonly internalApi: InternalTelegramApi;
   readonly redis: RedisConnection;
   readonly concurrency: number;
@@ -126,7 +183,12 @@ export const createTelegramNotificationWorker = (options: {
       const token = await deduplicator.claim(job.deliveryId);
       if (token === null) return;
       try {
-        await deliver(options.bot.api, options.internalApi, job);
+        await deliver(
+          options.bot.api,
+          options.internalApi,
+          job,
+          options.botUsername,
+        );
         await deduplicator.complete(job.deliveryId, token);
       } catch (error) {
         await deduplicator.release(job.deliveryId, token);

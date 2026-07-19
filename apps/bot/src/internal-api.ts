@@ -63,6 +63,11 @@ export interface InternalTelegramApi {
     readonly telegramChatId: string;
     readonly messageId: string;
   }): Promise<void>;
+  createLaunchToken(input: {
+    readonly action: "PAY_CONTRIBUTION";
+    readonly chatId: string;
+    readonly collageId: string;
+  }): Promise<{ readonly token: string; readonly expiresInSeconds: number }>;
   ready(): Promise<boolean>;
 }
 
@@ -156,6 +161,23 @@ export class SignedInternalTelegramClient implements InternalTelegramApi {
     input: Parameters<InternalTelegramApi["recordPinned"]>[0],
   ): Promise<void> {
     await this.#request("/internal/telegram/messages/pinned", "POST", input);
+  }
+
+  async createLaunchToken(
+    input: Parameters<InternalTelegramApi["createLaunchToken"]>[0],
+  ): ReturnType<InternalTelegramApi["createLaunchToken"]> {
+    return z
+      .object({
+        token: z.string().min(20),
+        expiresInSeconds: z.number().positive(),
+      })
+      .parse(
+        await this.#request(
+          "/internal/telegram/actions/create-launch-token",
+          "POST",
+          input,
+        ),
+      );
   }
 
   async ready(): Promise<boolean> {

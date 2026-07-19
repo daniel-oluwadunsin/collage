@@ -64,8 +64,8 @@ MONNIFY_DIRECT_DEBIT_ENABLED=true
 MONNIFY_DISBURSEMENT_ENABLED=true
 MONNIFY_IDENTITY_VERIFICATION_MODE=mock
 MONNIFY_DISBURSEMENT_MFA_MODE=manual
-MONNIFY_WEBHOOK_REQUIRE_SIGNATURE=false
 MONNIFY_WEBHOOK_ALLOWED_IPS=
+MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS=false
 
 CARD_SETUP_POLICY=commitment_deposit
 CARD_SETUP_AMOUNT_MINOR=10000
@@ -159,14 +159,9 @@ BotFather/deployment setup:
 ### 2.4 Worker
 
 ```dotenv
-WORKER_CONCURRENCY_PAYMENTS=5
-WORKER_CONCURRENCY_PAYOUTS=2
-WORKER_CONCURRENCY_TELEGRAM=10
-
+WORKER_HEALTH_PORT=4002
 DATABASE_URL=postgresql://collage:collage@postgres:5432/collage
 REDIS_URL=redis://redis:6379
-
-TELEGRAM_BOT_TOKEN=
 
 MONNIFY_ENV=sandbox
 MONNIFY_BASE_URL=https://sandbox.monnify.com
@@ -174,13 +169,23 @@ MONNIFY_API_KEY=
 MONNIFY_SECRET_KEY=
 MONNIFY_CONTRACT_CODE=
 MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER=
-MONNIFY_CARD_TOKENIZATION_ENABLED=false
-MONNIFY_DIRECT_DEBIT_ENABLED=true
-MONNIFY_DISBURSEMENT_ENABLED=true
-MONNIFY_DISBURSEMENT_MFA_MODE=manual
+API_PUBLIC_URL=https://api.example.ng
 
+APP_ENCRYPTION_KEY_ID=
 APP_ENCRYPTION_KEY_BASE64=
 APP_HASH_PEPPER=
+INTERNAL_SERVICE_TOKEN=
+LAUNCH_TOKEN_HASH_SECRET=
+PROVIDER_CALLS_ENABLED=false
+
+WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS=3
+WORKER_PENDING_POLL_SECONDS=60
+WORKER_STALE_OPERATION_MINUTES=15
+WORKER_OUTBOX_CONCURRENCY=1
+WORKER_LIFECYCLE_CONCURRENCY=4
+WORKER_PAYMENT_CONCURRENCY=10
+WORKER_PAYOUT_CONCURRENCY=2
+WORKER_REMINDER_CONCURRENCY=2
 ```
 
 ### 2.5 Mini App
@@ -188,7 +193,8 @@ APP_HASH_PEPPER=
 Only public values:
 
 ```dotenv
-NEXT_PUBLIC_API_URL=https://api.example.ng/v1
+API_INTERNAL_URL=http://127.0.0.1:4000
+NEXT_PUBLIC_API_URL=/api/v1
 NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=
 NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=
 NEXT_PUBLIC_APP_ENV=development
@@ -208,25 +214,156 @@ OTEL_EXPORTER_OTLP_ENDPOINT=
 
 Sensitive scrubbing is mandatory before enabling.
 
+### 2.7 Complete variable reference
+
+This section covers every key in the root `.env.example`. “Generate” commands
+must be run independently for each secret; never reuse one generated value for
+two variables. Values marked **browser-public** are embedded in JavaScript and
+must never contain credentials.
+
+#### Runtime and local infrastructure
+
+| Variable            | Owner / secrecy                                  | Meaning                                                                        | How to choose or obtain it                                                                                                                                                          |
+| ------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`          | API, bot, worker, Mini App / public              | Activates development, test, or production safeguards.                         | Use `development` locally and `production` only in deployed services. Do not invent another value.                                                                                  |
+| `LOG_LEVEL`         | API, bot, worker / public                        | Lowest Pino severity emitted.                                                  | Choose `debug` locally; normally `info` or `warn` in production.                                                                                                                    |
+| `POSTGRES_DB`       | Compose PostgreSQL / sensitive configuration     | Database created by the PostgreSQL image.                                      | Choose a stable database name such as `collage`; your managed-database provider supplies it in production.                                                                          |
+| `POSTGRES_USER`     | Compose PostgreSQL / sensitive configuration     | PostgreSQL login role created by the image.                                    | Choose a dedicated least-privilege role locally; obtain the assigned username from the managed-database console in production.                                                      |
+| `POSTGRES_PASSWORD` | Compose PostgreSQL / **secret**                  | Password for `POSTGRES_USER`.                                                  | Generate with `openssl rand -base64 32`, or use the password issued/rotated by the managed-database secret manager.                                                                 |
+| `DATABASE_URL`      | API, worker, migrate / **secret**                | PostgreSQL connection URL, including database, role, password, host, and port. | Compose uses `postgresql://<user>:<password>@postgres:5432/<db>`. In production copy the TLS connection string from the database provider; URL-encode reserved password characters. |
+| `REDIS_URL`         | API, bot, worker / **secret** when authenticated | Redis/BullMQ connection URL.                                                   | Compose uses `redis://redis:6379`. Copy the TLS/authenticated URL from the managed Redis provider in production, normally `rediss://...`.                                           |
+| `POSTGRES_PORT`     | Compose host binding / public                    | Host port forwarded to container port 5432 for local access.                   | Use `5432` unless another local PostgreSQL already owns it; then choose an unused port such as `55432`. It is not published by the production overlay.                              |
+| `REDIS_PORT`        | Compose host binding / public                    | Host port forwarded to container port 6379 for local access.                   | Use `6379` unless occupied; then choose an unused port such as `56379`. It is not published by the production overlay.                                                              |
+
+#### URLs and service ports
+
+| Variable              | Owner / secrecy      | Meaning                                                                                       | How to choose or obtain it                                                                                                                  |
+| --------------------- | -------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_APP_URL`      | Reserved / public    | Intended umbrella product URL. The current runtime does not read it.                          | Use the canonical public Collage website URL if retained for deployment metadata; otherwise leave blank.                                    |
+| `API_PUBLIC_URL`      | API, worker / public | Browser/provider-reachable API origin without `/v1`. Used when creating public callback URLs. | Use the HTTPS API domain configured in DNS/reverse proxy, for example `https://api.example.ng`.                                             |
+| `MINI_APP_PUBLIC_URL` | API / public         | Canonical HTTPS origin of the Telegram Mini App.                                              | Use the deployed Next.js URL registered with BotFather, without a trailing route.                                                           |
+| `INTERNAL_API_URL`    | bot / internal       | Base URL used by the bot to call the API over the private network.                            | In Compose use `http://api:4000`; outside Compose use the API’s private service-discovery URL. Never point it at an untrusted public proxy. |
+| `API_PORT`            | API / public         | API listen port inside its process/container.                                                 | Keep `4000` unless the platform requires another port. Compose currently fixes the container value to `4000`.                               |
+| `BOT_PORT`            | bot / public         | Bot health/webhook HTTP listen port.                                                          | Keep `4001` unless the platform requires another port.                                                                                      |
+| `WORKER_HEALTH_PORT`  | worker / public      | Worker liveness/readiness/metrics HTTP port.                                                  | Keep `4002` unless the platform requires another port.                                                                                      |
+| `PORT`                | Mini App / public    | Next.js server listen port.                                                                   | Use `3000` locally/Compose or the port injected by the hosting platform.                                                                    |
+
+#### API, cryptography, and internal authentication
+
+| Variable                    | Owner / secrecy                       | Meaning                                                                            | How to choose or obtain it                                                                                                                                                       |
+| --------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_TRUST_PROXY`           | Reserved / public                     | Intended Express trusted-proxy hop count. The current runtime does not read it.    | Do not rely on this key for security. Configure the deployment proxy/network explicitly until runtime support is added.                                                          |
+| `CORS_ALLOWED_ORIGINS`      | API / public                          | Comma-separated exact browser origins allowed to call the API.                     | Enter the deployed Mini App origin(s), including scheme and port when non-default; never use `*` with authenticated traffic.                                                     |
+| `SWAGGER_ENABLED`           | Reserved / public                     | Intended Swagger switch. The current runtime does not read it.                     | Do not rely on it to hide documentation; protect `/docs` at the proxy/network layer until runtime support is added.                                                              |
+| `SWAGGER_PATH`              | Reserved / public                     | Intended Swagger route. The current runtime does not read it.                      | Keep `/docs` only as documentation metadata; changing it currently has no runtime effect.                                                                                        |
+| `APP_ENCRYPTION_KEY_ID`     | API, worker / sensitive configuration | Operator-managed identifier stored beside ciphertext to support key rotation.      | Choose a non-secret immutable label such as `collage-data-2026-07`; map it to the actual key in the secret manager.                                                              |
+| `APP_ENCRYPTION_KEY_BASE64` | API, worker / **secret**              | AES-256-GCM application-data key; it must decode to exactly 32 bytes.              | Generate once with `openssl rand -base64 32`; store in a KMS/secret manager and back it up under the matching key ID. Losing it makes encrypted payout/provider data unreadable. |
+| `APP_HASH_PEPPER`           | API, worker / **secret**              | Server-side pepper for irreversible sensitive-value hashes.                        | Generate independently with `openssl rand -hex 32` and store in the secret manager. Rotation requires an explicit migration strategy.                                            |
+| `INTERNAL_SERVICE_TOKEN`    | API, bot, worker / **secret**         | Shared HMAC/authentication secret for bot/worker-to-API requests.                  | Generate independently with `openssl rand -hex 32`; distribute only to those three services.                                                                                     |
+| `LAUNCH_TOKEN_HASH_SECRET`  | API, worker / **secret**              | Secret used to hash opaque Telegram launch tokens before persistence/verification. | Generate independently with `openssl rand -hex 32`; store in the secret manager.                                                                                                 |
+| `API_SESSION_SECRET`        | API / **secret**                      | Key material used to sign Mini App API sessions.                                   | Generate independently with `openssl rand -hex 32`; changing it invalidates active sessions.                                                                                     |
+| `PROVIDER_CALLS_ENABLED`    | API, worker / public switch           | Master fail-closed switch for outbound money/provider calls.                       | Keep `false` for local/demo and until credentials, webhooks, allowlists, reconciliation, and approvals are verified; set `true` only through an audited deployment change.       |
+
+#### Telegram
+
+| Variable                             | Owner / secrecy       | Meaning                                                                                      | How to choose or obtain it                                                                                                                  |
+| ------------------------------------ | --------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`                 | API, bot / **secret** | Authenticates Telegram Bot API calls and validates Mini App init data.                       | Create/select the bot in `@BotFather`, use `/token`, and store the returned token in the secret manager. Revoke it in BotFather if exposed. |
+| `TELEGRAM_BOT_USERNAME`              | bot / public          | Bot username used in mentions and direct Mini App links.                                     | Copy the username assigned in BotFather, with or without the leading `@`.                                                                   |
+| `TELEGRAM_MINI_APP_SHORT_NAME`       | bot / public          | BotFather short name in `t.me/<bot>/<short-name>` direct links.                              | Create/configure the Mini App in BotFather and copy its short name exactly; allowed characters are letters, digits, and underscore.         |
+| `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` | API / public policy   | Maximum accepted age of signed Telegram Mini App init data.                                  | Use `3600` by default. Keep this bounded; lowering it below realistic Mini App startup/reload time causes false authentication failures.    |
+| `TELEGRAM_WEBHOOK_SECRET`            | bot / **secret**      | Telegram `secret_token` checked on every webhook request. It is separate from the bot token. | Generate with `openssl rand -hex 32`; valid characters are letters, digits, `_`, and `-`, length 32–256.                                    |
+| `TELEGRAM_WEBHOOK_PUBLIC_URL`        | bot / public          | Public HTTPS endpoint Telegram sends updates to.                                             | Deploy/expose the bot, then use its exact URL ending in `/telegram/webhook`, for example `https://bot.example.ng/telegram/webhook`.         |
+| `BOT_INTERNAL_REQUEST_TIMEOUT_MS`    | bot / public policy   | Maximum duration for a bot-to-API request.                                                   | Start with `5000`; tune from latency metrics, never to mask a persistently unhealthy API. Allowed range is 500–30000.                       |
+| `TELEGRAM_NOTIFICATION_CONCURRENCY`  | bot / public policy   | Maximum concurrent notification deliveries.                                                  | Start with `10`; lower it if Telegram 429s rise. Allowed range is 1–50.                                                                     |
+| `TELEGRAM_RATE_LIMIT_MAX_RETRIES`    | bot / public policy   | Maximum Telegram 429 retries using Telegram’s documented `retry_after`.                      | Keep `2` initially; allowed range is 0–5. This does not permit blind retries of other failures.                                             |
+
+#### Monnify
+
+| Variable                                     | Owner / secrecy                               | Meaning                                                                                           | How to choose or obtain it                                                                                                                                         |
+| -------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MONNIFY_ENV`                                | API, worker / public                          | Selects `sandbox` or `production` provider behavior.                                              | Use `sandbox` with sandbox credentials. Change to `production` only after Monnify go-live approval.                                                                |
+| `MONNIFY_BASE_URL`                           | API, worker / public                          | Monnify API origin.                                                                               | Use `https://sandbox.monnify.com` for sandbox. Copy the current live base URL from official Monnify documentation for production; do not guess it.                 |
+| `MONNIFY_API_KEY`                            | API, worker / **secret**                      | Merchant API key used to obtain Monnify access tokens.                                            | Copy from the Monnify dashboard for the selected environment and store in the secret manager.                                                                      |
+| `MONNIFY_SECRET_KEY`                         | API, worker / **secret**                      | Merchant secret used for authentication and webhook HMAC verification.                            | Copy from the Monnify dashboard for the selected environment; never expose to the browser. Rotate in Monnify if leaked.                                            |
+| `MONNIFY_CONTRACT_CODE`                      | API, worker / sensitive configuration         | Monnify merchant contract code attached to collections/transfers.                                 | Copy the contract code shown in the Monnify dashboard for the same environment as the API/secret keys.                                                             |
+| `MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER` | worker / sensitive financial configuration    | Source wallet/account used for payouts and balance checks.                                        | Obtain from the enabled Monnify disbursement wallet in the dashboard or from Monnify support; confirm it belongs to the same contract before enabling calls.       |
+| `MONNIFY_CARD_TOKENIZATION_ENABLED`          | Reserved capability record / public switch    | Records intended card-tokenization enablement; current runtime does not read it.                  | Set to `true` only after Monnify confirms the feature for this contract, but keep `PROVIDER_CALLS_ENABLED=false` until runtime and operational gates are complete. |
+| `MONNIFY_DIRECT_DEBIT_ENABLED`               | Reserved capability record / public switch    | Records intended direct-debit enablement; current runtime does not read it.                       | Obtain written/dashboard confirmation from Monnify for the selected environment before recording `true`.                                                           |
+| `MONNIFY_DISBURSEMENT_ENABLED`               | Reserved capability record / public switch    | Records intended payout enablement; current runtime does not read it.                             | Set from Monnify’s contract/dashboard enablement status only; also complete static-egress and wallet checks.                                                       |
+| `MONNIFY_IDENTITY_VERIFICATION_MODE`         | Reserved capability record / sensitive policy | Records the intended identity provider mode; current runtime does not read it.                    | Keep `mock` only for non-production demos. Production requires a product/compliance decision and confirmed provider access.                                        |
+| `MONNIFY_DISBURSEMENT_MFA_MODE`              | Reserved capability record / sensitive policy | Records intended manual/provider MFA operations; current runtime does not read it.                | Choose only after Monnify confirms the merchant’s transfer MFA workflow and operations assigns accountable approvers.                                              |
+| `MONNIFY_WEBHOOK_ALLOWED_IPS`                | API / public security policy                  | Comma-separated source IP allowlist checked before accepting Monnify webhooks.                    | Copy the current production webhook source IPs from official Monnify docs; the documented value at the final audit was `35.242.133.146`. Reverify before go-live.  |
+| `MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS`    | API / high-risk switch                        | Allows unsigned webhooks only in sandbox because Monnify documents sandbox signature differences. | Keep `false` by default. Set `true` only for an isolated sandbox when official behavior requires it; it is rejected as a production practice.                      |
+
+#### Registration and SMSGate
+
+| Variable                     | Owner / secrecy                                             | Meaning                                                                                         | How to choose or obtain it                                                                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CARD_SETUP_POLICY`          | Reserved product policy / public                            | Intended setup policy label; current runtime does not read it.                                  | Keep `commitment_deposit` only if product/compliance has approved that flow; do not assume it changes runtime behavior.                                                           |
+| `CARD_SETUP_AMOUNT_MINOR`    | Reserved product policy / sensitive financial configuration | Intended commitment deposit in integer kobo; current runtime does not read it.                  | Product/compliance must approve the amount. `10000` means ₦100.00. Never enter naira decimals or floating-point values.                                                           |
+| `OTP_PROVIDER`               | API / public switch                                         | Selects `unconfigured` or the SMSGate transport.                                                | Use `unconfigured` until a gateway is ready; use `smsgate` only with valid credentials and a production-private deployment where required.                                        |
+| `OTP_TTL_SECONDS`            | API / public policy                                         | OTP validity window.                                                                            | Start with `600` (10 minutes); choose 30–3600 based on security/support policy.                                                                                                   |
+| `SMSGATE_API_BASE_URL`       | API / sensitive configuration                               | Base URL for the SMSGate API.                                                                   | Public cloud: `https://api.sms-gate.app/3rdparty/v1`; private: the deployed HTTPS server plus `/api/3rdparty/v1`; local: the Android device’s reachable `http://<phone-ip>:8080`. |
+| `SMSGATE_DEPLOYMENT_MODE`    | API / public policy                                         | Declares `cloud`, `local`, or `private` so production safety checks can reject unsafe topology. | Match the deployment actually selected in SMSGate. Production Collage requires `private`.                                                                                         |
+| `SMSGATE_AUTH_MODE`          | API / public policy                                         | Selects JWT or Basic authentication.                                                            | Use `jwt` for public/private server APIs; the Android Local Server requires `basic`.                                                                                              |
+| `SMSGATE_USERNAME`           | API / **secret**                                            | SMSGate API username.                                                                           | Copy the credential generated by the Android SMSGate app or private-server admin; store in the secret manager.                                                                    |
+| `SMSGATE_PASSWORD`           | API / **secret**                                            | SMSGate API password.                                                                           | Copy the paired generated credential; store in the secret manager and rotate if exposed.                                                                                          |
+| `SMSGATE_DEVICE_ID`          | API / sensitive configuration                               | Optional exact Android device to use when multiple devices are connected.                       | Copy the device ID from the SMSGate device/admin screen; leave blank to let the account choose.                                                                                   |
+| `SMSGATE_SIM_NUMBER`         | API / sensitive configuration                               | SIM slot number on the selected device.                                                         | Read the slot in the SMSGate Android app; allowed values are 1–3.                                                                                                                 |
+| `SMSGATE_PRIORITY`           | API / public policy                                         | SMSGate queue priority.                                                                         | Start with `100`; allowed range is -128 to 127. Change only with an explicit queue policy.                                                                                        |
+| `SMSGATE_REQUEST_TIMEOUT_MS` | API / public policy                                         | HTTP timeout for gateway requests.                                                              | Start with `10000`; tune from private-gateway latency within 1000–60000. Timeouts remain ambiguous and are not proof of failure.                                                  |
+| `SMSGATE_TOKEN_TTL_SECONDS`  | API / public policy                                         | Requested/cached JWT lifetime.                                                                  | Start with `3600`; choose 300–86400 according to the private-server token policy.                                                                                                 |
+
+#### Worker controls
+
+| Variable                               | Owner / secrecy                       | Meaning                                                                    | How to choose or obtain it                                                                                             |
+| -------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS` | worker / sensitive financial policy   | Maximum bounded automatic charge attempts before manual fallback.          | Use the approved risk/provider policy; default `3`, allowed 1–10. This does not permit retrying an unresolved attempt. |
+| `WORKER_PENDING_POLL_SECONDS`          | worker / public policy                | Delay between status polls for ambiguous provider operations.              | Start with `60`; tune within 15–3600 against provider rate limits and settlement latency.                              |
+| `WORKER_STALE_OPERATION_MINUTES`       | worker / sensitive operational policy | Age at which unresolved operations trigger stale-operation reconciliation. | Start with `15`; tune within 1–1440 using observed provider latency. It never converts unknown to failed.              |
+| `WORKER_OUTBOX_CONCURRENCY`            | worker / public capacity              | Concurrent transactional-outbox publications.                              | Keep `1` initially; allowed range 1–4. Increase only after observing database/Redis capacity.                          |
+| `WORKER_LIFECYCLE_CONCURRENCY`         | worker / public capacity              | Concurrent Collage/cycle lifecycle jobs.                                   | Start with `4`; allowed range 1–20.                                                                                    |
+| `WORKER_PAYMENT_CONCURRENCY`           | worker / sensitive provider capacity  | Concurrent payment jobs.                                                   | Start with `10`; lower to honor Monnify limits or raise within 1–50 after load evidence.                               |
+| `WORKER_PAYOUT_CONCURRENCY`            | worker / sensitive provider capacity  | Concurrent payout jobs.                                                    | Keep low (`2`) to limit blast radius; allowed range 1–10. Database/idempotency invariants still enforce payout once.   |
+| `WORKER_REMINDER_CONCURRENCY`          | worker / public capacity              | Concurrent owing-member reminder jobs.                                     | Start with `2`; allowed range 1–10 and tune against Telegram limits.                                                   |
+
+#### Mini App and optional observability
+
+| Variable                                   | Owner / secrecy                                  | Meaning                                                                      | How to choose or obtain it                                                                                                                 |
+| ------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `API_INTERNAL_URL`                         | Mini App server / internal                       | API origin used by the same-origin Next.js `/api/v1` rewrite.                | Use `http://127.0.0.1:4000` locally or the private service address in deployment; never expose credentials in this value.                  |
+| `NEXT_PUBLIC_API_URL`                      | Mini App / **browser-public**                    | API base path/origin compiled into the browser bundle.                       | Use `/api/v1` for the same-origin proxy so Telegram on a phone never tries to contact its own `127.0.0.1`; an HTTPS API origin also works. |
+| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`        | Mini App / **browser-public**                    | Public bot username used by the UI.                                          | Copy `TELEGRAM_BOT_USERNAME`; never put the bot token here.                                                                                |
+| `NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME` | Mini App / **browser-public**                    | Public BotFather Mini App short name.                                        | Copy `TELEGRAM_MINI_APP_SHORT_NAME` exactly.                                                                                               |
+| `NEXT_PUBLIC_APP_ENV`                      | Mini App / **browser-public**                    | Non-secret label displayed/used for client environment behavior.             | Use `development`, `staging`, or `production` to match the deployed build.                                                                 |
+| `SENTRY_DSN`                               | Reserved observability / sensitive configuration | Intended error-ingestion DSN; current runtime does not read it.              | Obtain a project DSN from Sentry only after configuring server/client scrubbing. Never use a DSN that permits sensitive payload capture.   |
+| `SENTRY_ENVIRONMENT`                       | Reserved observability / public                  | Intended Sentry environment label; current runtime does not read it.         | Use the deployment label from the observability project, such as `staging` or `production`.                                                |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`              | Reserved observability / sensitive configuration | Intended OpenTelemetry collector endpoint; current runtime does not read it. | Obtain the internal HTTPS/gRPC endpoint from the telemetry platform after redaction and access controls are approved.                      |
+
+If a variable is marked reserved, setting it does not currently change runtime
+behavior. It remains documented so operators do not mistake a placeholder for
+an enforced financial or security control.
+
 ## 3. Expected repository scripts
 
 ```json
 {
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "lint": "turbo lint",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
-    "test:integration": "turbo test:integration --concurrency=1",
-    "test:e2e": "turbo test:e2e",
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
     "db:generate": "pnpm --filter @collage/database prisma:generate",
-    "db:migrate": "pnpm --filter @collage/database prisma:migrate",
-    "db:seed": "pnpm --filter @collage/database prisma:seed"
+    "db:migrate": "pnpm --filter @collage/database prisma:migrate"
   }
 }
 ```
+
+The product owner required all test files and test scripts to be removed after
+the recorded verification run. See `docs/IMPLEMENTATION_STATUS.md` for the
+pre-removal evidence.
 
 ## 4. Compose services
 

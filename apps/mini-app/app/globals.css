@@ -577,6 +577,26 @@ a:focus-visible {
   color: var(--foreground);
 }
 
+.operational-note {
+  background: var(--brand-yellow-soft);
+  border: 3px solid var(--border);
+  box-shadow: var(--hard-shadow-sm);
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+.operational-note > strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.operational-note > span {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .inline-loading {
   background: var(--surface-subtle);
   border: 2px dashed var(--border);

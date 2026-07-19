@@ -4,11 +4,14 @@ import {
   appendAuditLog,
   appendLedgerTransaction,
   appendOutboxEvent,
+  activateReplacementPaymentMethod,
+  completeRegistration,
   createEligiblePayout,
   lockCollage,
   lockContribution,
   lockCycle,
   lockPayout,
+  rejectCardAuthorizationWithoutReusableToken,
   type PrismaClient,
   type TransactionClient,
   withSerializableTransaction,
@@ -30,6 +33,7 @@ import { deterministicJobId } from "@collage/queue";
 import {
   decryptString,
   encryptString,
+  keyedHash,
   type EncryptionKeyring,
 } from "@collage/security";
 import { z } from "zod";
@@ -85,10 +89,16 @@ const safeReference = (prefix: string, id: string, attempt: number): string =>
     .slice(0, 32)}`;
 
 const unresolvedProviderStates = ["CREATED", "PENDING", "UNKNOWN"] as const;
+const escapeTelegramHtml = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 
 export interface WorkerEngineOptions {
   readonly client: PrismaClient;
   readonly encryption: EncryptionKeyring;
+  readonly hashKey: Buffer;
   readonly maximumChargeAttempts: number;
   readonly pendingPollMs: number;
   readonly provider: WorkerProvider;
@@ -101,6 +111,141 @@ export interface WorkerEngineOptions {
 
 export class WorkerEngine {
   constructor(private readonly options: WorkerEngineOptions) {}
+
+  private async completeRegistrationAfterAuthorization(
+    memberId: string,
+    correlationId: string,
+  ): Promise<void> {
+    const member = await this.options.client.collageMember.findUniqueOrThrow({
+      where: { id: memberId },
+    });
+    if (member.state !== "PAYMENT_METHOD_AUTHORIZING") return;
+    if (
+      member.acceptedRuleVersionId === null ||
+      member.identityVerificationMode === null ||
+      (member.identityVerificationMode !== "COLLECTED_UNVERIFIED" &&
+        member.identityVerifiedAt === null) ||
+      member.legalNameEncrypted === null ||
+      member.ninEncrypted === null ||
+      member.ninHash === null ||
+      member.phoneEncrypted === null ||
+      member.phoneHash === null ||
+      member.phoneVerifiedAt === null ||
+      member.preferredChargeRule === null ||
+      member.recurringConsentAt === null
+    ) {
+      throw new Error(
+        "Registration evidence is incomplete after authorization",
+      );
+    }
+    await completeRegistration(
+      this.options.client,
+      memberId,
+      {
+        acceptedRuleVersionId: member.acceptedRuleVersionId,
+        identityVerificationMode: member.identityVerificationMode,
+        identityVerifiedAt: member.identityVerifiedAt,
+        legalNameEncrypted: member.legalNameEncrypted,
+        ninEncrypted: member.ninEncrypted,
+        ninHash: member.ninHash,
+        phoneEncrypted: member.phoneEncrypted,
+        phoneHash: member.phoneHash,
+        phoneVerifiedAt: member.phoneVerifiedAt,
+        preferredChargeRule: member.preferredChargeRule,
+        recurringConsentAt: member.recurringConsentAt,
+      },
+      correlationId,
+    );
+  }
+
+  private async reconcileCardAuthorization(
+    authorizationId: string,
+    correlationId: string,
+  ): Promise<void> {
+    const card = await this.options.client.cardAuthorization.findUniqueOrThrow({
+      where: { id: authorizationId },
+      include: { paymentMethod: true },
+    });
+    if (card.state === "SUCCEEDED") {
+      await this.completeRegistrationAfterAuthorization(
+        card.paymentMethod.memberId,
+        correlationId,
+      );
+      return;
+    }
+    if (card.providerReference === null) return;
+    const verification =
+      await this.options.provider.verifyTransactionByPaymentReference(
+        card.providerReference,
+      );
+    if (verification.outcome !== "paid") {
+      if (["failed", "expired", "reversed"].includes(verification.outcome)) {
+        await this.options.client.cardAuthorization.update({
+          where: { id: card.id },
+          data: {
+            state:
+              verification.outcome === "expired"
+                ? "EXPIRED"
+                : "FAILED_TERMINAL",
+          },
+        });
+      }
+      return;
+    }
+    if (
+      verification.amountPaidMinor !== card.setupAmountMinor ||
+      verification.currency !== card.currency
+    ) {
+      throw new Error("Verified card authorization did not match setup terms");
+    }
+    if (verification.cardToken === undefined) {
+      await rejectCardAuthorizationWithoutReusableToken(
+        this.options.client,
+        card.id,
+        correlationId,
+        "worker",
+      );
+      return;
+    }
+    const activation = {
+      activeAt: new Date(),
+      credentialEncrypted: encryptString(
+        verification.cardToken,
+        this.options.encryption,
+        `payment-method:${card.paymentMethodId}:credential`,
+      ),
+      credentialHash: keyedHash(verification.cardToken, this.options.hashKey),
+      maskedLabel: "Saved card",
+    };
+    const current = await this.options.client.paymentMethod.findFirst({
+      where: {
+        memberId: card.paymentMethod.memberId,
+        state: "ACTIVE",
+        id: { not: card.paymentMethodId },
+      },
+    });
+    if (current === null) {
+      await this.options.client.paymentMethod.update({
+        where: { id: card.paymentMethodId },
+        data: { state: "ACTIVE", ...activation },
+      });
+    } else {
+      await activateReplacementPaymentMethod(
+        this.options.client,
+        card.paymentMethod.memberId,
+        card.paymentMethodId,
+        activation,
+      );
+    }
+    await this.options.client.cardAuthorization.update({
+      where: { id: card.id },
+      data: { state: "SUCCEEDED", reusableTokenReady: true },
+    });
+    await this.completeRegistrationAfterAuthorization(
+      card.paymentMethod.memberId,
+      correlationId,
+    );
+  }
 
   async startCollage(collageId: string, correlationId: string): Promise<void> {
     const snapshot = await this.options.client.collage.findUniqueOrThrow({
@@ -892,7 +1037,18 @@ export class WorkerEngine {
         contributions: {
           where: { state: { not: "PAID" } },
           include: {
-            member: true,
+            member: {
+              include: {
+                user: {
+                  include: {
+                    telegramIdentities: {
+                      where: { isBot: false },
+                      take: 1,
+                    },
+                  },
+                },
+              },
+            },
             paymentAttempts: {
               where: { state: { in: [...unresolvedProviderStates] } },
             },
@@ -906,10 +1062,16 @@ export class WorkerEngine {
     );
     if (owing.length > 0) {
       const names = owing
-        .map(
-          ({ member }) =>
-            `<a href="tg://user?id=${member.telegramUserId}">member</a>`,
-        )
+        .map(({ member }) => {
+          const identity = member.user.telegramIdentities[0];
+          const name =
+            identity?.firstName ??
+            identity?.username ??
+            (member.payoutPosition === null
+              ? "member"
+              : `member ${String(member.payoutPosition)}`);
+          return `<a href="tg://user?id=${member.telegramUserId}">${escapeTelegramHtml(name)}</a>`;
+        })
         .join(", ");
       await this.options.scheduler.enqueue({
         queue: "telegram-notifications",
@@ -927,6 +1089,12 @@ export class WorkerEngine {
           text: `Contribution reminder: ${names}. Members with a provider payment still pending are excluded.`,
           parseMode: "HTML",
           buttons: [],
+          actionButton: {
+            action: "PAY_CONTRIBUTION",
+            chatId: cycle.collage.chat.id,
+            collageId: cycle.collage.id,
+            label: "Pay now",
+          },
         },
       });
     }
@@ -1068,7 +1236,7 @@ export class WorkerEngine {
       parsed.eventData.paymentReference,
       parsed.eventData.reference,
     ].filter((value): value is string => typeof value === "string");
-    const [payment, payout] = await Promise.all([
+    const [payment, payout, cardAuthorization] = await Promise.all([
       this.options.client.paymentAttempt.findFirst({
         where: { providerReference: { in: candidates } },
         select: { id: true },
@@ -1077,16 +1245,25 @@ export class WorkerEngine {
         where: { providerReference: { in: candidates } },
         select: { id: true },
       }),
+      this.options.client.cardAuthorization.findFirst({
+        where: { providerReference: { in: candidates } },
+        select: { id: true },
+      }),
     ]);
     if (payment !== null)
       await this.pollPaymentAttempt(payment.id, correlationId);
     if (payout !== null) await this.pollPayoutAttempt(payout.id, correlationId);
+    if (cardAuthorization !== null)
+      await this.reconcileCardAuthorization(
+        cardAuthorization.id,
+        correlationId,
+      );
     await this.options.client.webhookEvent.update({
       where: { id: event.id },
       data: {
         processedAt: new Date(),
         processingErrorCode:
-          payment === null && payout === null
+          payment === null && payout === null && cardAuthorization === null
             ? "PROVIDER_REFERENCE_NOT_FOUND"
             : null,
       },
@@ -1581,7 +1758,11 @@ export class WorkerEngine {
       aggregateId: contributionId,
       aggregateVersion: contribution.version + 1,
       correlationId,
-      payload: { contributionId, reason },
+      payload: {
+        contributionId,
+        cycleId: contribution.cycleId,
+        reason,
+      },
     });
   }
 

@@ -54,7 +54,6 @@ export const verifyTelegramInitData = (
   }
 
   parameters.delete("hash");
-  parameters.delete("signature");
   const dataCheckString = [...parameters.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)

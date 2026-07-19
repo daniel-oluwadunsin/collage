@@ -1,5 +1,32 @@
 # Collage Engineering Decisions
 
+## 2026-07-19 — A null sandbox card token is not an active payment method
+
+Monnify documents that sandbox verification may return a null real card token
+and only indicate whether the card would support tokenization in production.
+Collage accepts and normalizes that response shape, terminally closes the setup
+authorization, and returns the member to payment-method selection. It does not
+invent or persist a sandbox token and does not count the member as registered,
+because future automatic card collection would be impossible.
+
+## 2026-07-19 — Current group-card actions are reusable and bounded
+
+Group status-card launch tokens are authorization context, not proof that an
+operation succeeded. They are reusable for 30 days so closing a Telegram
+webview does not consume the current action. Bootstrap still verifies signed
+Telegram init data, current membership/role, chat/Collage binding, and action
+eligibility on every open. Money-moving endpoints retain their own
+idempotency, authorization, and server-side provider verification.
+
+## 2026-07-19 — Card setup completes registration only after verification
+
+Monnify redirect and webhook acknowledgement never mark registration complete.
+The API polling path and durable webhook worker both requery Monnify by the
+stored payment reference, verify exact setup amount/currency and reusable card
+token evidence, activate the payment method idempotently, and invoke the shared
+registration-completion invariant. An authorizing registration exposes only
+its opaque authorization ID so a reopened Mini App can safely resume polling.
+
 ## D-001 — Node and package manager pin
 
 - Date: 2026-07-18
@@ -197,6 +224,8 @@
 ## D-022 — Identity production enablement fails closed
 
 - Date: 2026-07-18
+- Status: superseded by D-045 for registration state; live identity
+  verification remains a production compliance gate.
 - Decision: identity remains `IDENTITY_PENDING`; no sandbox NIN response or
   mock success completes registration.
 - Reason: Monnify documents NIN verification as live-only and merchant
@@ -393,3 +422,171 @@
 - Reason: the product owner explicitly required that no test files remain.
   Preserving evidence while removing executable tests is the narrowest way to
   follow that direction without falsely claiming unverified behavior.
+
+## D-039 — Group buttons launch the configured Main Mini App
+
+- Date: 2026-07-19
+- Decision: bot status-card buttons use Telegram's Main Mini App direct-link
+  form, `https://t.me/<bot>?startapp=<opaque-token>&mode=compact`. Bot startup
+  requires Telegram `getMe` to report `has_main_web_app=true`. The shared link
+  helper retains explicit named-app support for deployments that deliberately
+  select it, but Collage's bot does not use that path.
+- Reason: the deployed Collage bot is configured as a Main Mini App. Supplying
+  the bot username again as a named-app path can resolve to the bot chat when
+  BotFather's named-app configuration differs. Failing startup on missing Main
+  Mini App configuration is safer than sending creation buttons that silently
+  do not launch.
+
+## D-040 — Local Telegram Mini App API calls use a same-origin rewrite
+
+- Date: 2026-07-19
+- Decision: the browser uses `/api/v1`, and Next.js rewrites it to the
+  server-only `API_INTERNAL_URL`. Production may still compile a dedicated
+  HTTPS API origin when that topology is intentional.
+- Reason: `127.0.0.1` in an Android Telegram WebView means the Android device,
+  not the development Mac. A same-origin HTTPS request also avoids requiring a
+  third tunnel and keeps API diagnostics in the normal API terminal without
+  exposing request bodies, Telegram init data, or launch tokens.
+
+## D-041 — Registration completion owns start time and card setup amount
+
+- Date: 2026-07-19
+- Decision: Collage creation no longer accepts a first-cycle date, card setup
+  policy, or card setup amount. The API fixes card setup to a NGN 50 (`5000`
+  minor-unit) commitment charge. The transaction that changes the Collage from
+  `REGISTRATION_OPEN` to `STARTING` also sets `firstCycleStartAt` to that
+  transaction's timestamp.
+- Reason: all participant slots being fully registered is the MVP start
+  condition. Keeping the amount and effective start anchor server-owned
+  prevents client tampering, past-dated cycles, and a race between final opt-in
+  and worker scheduling.
+
+## D-042 — Creator opt-in and financial actions use member-scoped server state
+
+- Date: 2026-07-19
+- Decision: after creation and registration opening, the creator enters the
+  ordinary resumable member-registration flow instead of receiving a
+  privileged or partially populated membership. Every Collage view fetches the
+  viewer's registration projection. UI labels and routes distinguish payout
+  add/update and payment-method add/pending/replace. Setup and replacement
+  endpoints enforce those states, and PostgreSQL permits at most one
+  `AUTHORIZING` payment method per member.
+- Reason: group administration is not evidence of identity, payout ownership,
+  recurring-payment consent, or provider authorization. Server-derived state
+  prevents misleading replacement actions and modified clients from bypassing
+  safe payment-method cutover.
+
+## D-043 — Recurring payment setup is optional at registration
+
+- Date: 2026-07-19
+- Decision: a member may complete registration after verified identity, phone,
+  payout account, payout position, schedule, current rules/consent, and a
+  payment email, without activating a card token or direct-debit mandate. The
+  email is encrypted at rest and used only to initialize that member's manual
+  hosted checkout. The member remains eligible for the exactly-once final-slot
+  start transition.
+- Reason: opting into the group and supplying a payout destination must not be
+  coupled to recurring-provider availability. This does not weaken collection
+  evidence: manual members are never marked paid from registration or browser
+  redirect.
+
+## D-044 — Manual contributions use one source-of-truth group reminder
+
+- Date: 2026-07-19
+- Decision: when collection reaches a member without an active recurring
+  method, the worker transactionally marks manual payment required and emits an
+  outbox event. A deterministic, briefly delayed cycle job reloads all owing
+  members and sends one Telegram message with safe mentions and one
+  API-generated opaque Pay now action. The Mini App initializes checkout
+  automatically for the authorized member who opens it. Only verified Monnify
+  evidence posts the member-paid acknowledgement.
+- Reason: grouping avoids notification floods, source-of-truth reloads avoid
+  stale mentions, and a server-created checkout preserves authorization,
+  idempotency, amount ownership, and webhook-confirmed payment.
+
+## D-045 — Collected NIN is not represented as verified identity
+
+- Date: 2026-07-19
+- Decision: until an approved live identity provider is enabled, registration
+  stores encrypted NIN with identity mode `COLLECTED_UNVERIFIED` and a null
+  verification timestamp. The registered-member database constraint requires
+  this explicit mode or a real verification mode with a non-null verification
+  timestamp. Existing in-progress registrations with encrypted NIN are safely
+  backfilled to the explicit unverified mode.
+- Reason: the registration journey must distinguish collecting required
+  identity data from externally verifying it. Live identity verification and
+  the resulting compliance policy remain a production gate.
+
+## D-046 — Charge preferences use the domain schedule shape at the API boundary
+
+- Date: 2026-07-19
+- Decision: registration accepts only the domain-discriminated charge
+  preference (`kind`, `hour`, `minute`, plus frequency-specific fields). The
+  Mini App converts its form values before submission, the API rejects a
+  frequency mismatch, and a migration normalizes legacy records. If today's
+  preferred time has passed, the first valid occurrence inside the cycle is
+  used.
+- Reason: storing a presentation shape such as `{time: "09:00"}` deferred an
+  invalid schedule until the durable start job and exhausted its retries.
+  Boundary validation prevents a Collage from entering `STARTING` with data the
+  worker cannot execute.
+
+## D-047 — Group launch tokens verify the opening user at bootstrap
+
+- Date: 2026-07-19
+- Decision: status-card launch tokens remain persistent and bound to the
+  group/Collage/action, not to the member who mentioned the bot. When the
+  opening user is absent from the local membership projection, the API calls
+  Telegram `getChatMember`, fails closed on error/non-membership, and refreshes
+  the local projection before authorizing the action.
+- Reason: Telegram may not have delivered historic `chat_member` updates, so
+  limiting a group button to previously observed users incorrectly makes a
+  shared button appear user-bound. Possession of a forwarded opaque token alone
+  is still insufficient.
+
+## D-048 — Interactive bot responses reply to their triggering message
+
+- Date: 2026-07-19
+- Decision: `/collage`, `/status`, `/rules`, `/help`, and mention-triggered
+  responses use Telegram `reply_parameters` with
+  `allow_sending_without_reply=true`. Proactive financial notifications remain
+  standalone group messages.
+- Reason: the reply relationship makes the bot's response attributable in a
+  busy group without coupling durable notifications to an ephemeral source
+  message.
+
+## D-049 — Registration completion refreshes every current-state projection
+
+- Date: 2026-07-19
+- Decision: after manual registration completes, the Mini App invalidates the
+  member registration, Collage, status, and completion projections. The final
+  member receives an explicit “starting the first cycle” state from the
+  transaction response while durable worker processing moves the Collage from
+  `STARTING` to `ACTIVE`.
+- Reason: refreshing only the completion query left the surrounding Collage
+  state stale even though the exactly-once database transition and outbox event
+  had succeeded.
+
+## D-050 — Start retries are event-scoped and short windows charge at opening
+
+- Date: 2026-07-19
+- Decision: every `collage.start.requested` outbox event receives a distinct
+  deterministic BullMQ job ID containing the event ID. If the next preferred
+  charge occurrence is later than the cycle deadline, the contribution is
+  scheduled at cycle opening. A repair migration returns fully registered
+  `ACTIVE` Collages with zero cycles to `STARTING` and emits a new durable start
+  request.
+- Reason: a permanently failed BullMQ job must not block a later explicit
+  recovery event. A charge-time preference is best effort and cannot prevent
+  the required immediate start when the remaining collection window is shorter
+  than the time until that preference.
+
+## D-051 — Active-cycle APIs return presentation DTOs, not raw cycle rows
+
+- Date: 2026-07-19
+- Decision: the status API explicitly maps the Collage contribution amount to
+  `currentCycle.amountPerMemberMinor`. The Mini App continues to reject
+  responses that do not satisfy its Zod contract.
+- Reason: `Cycle.expectedAmountMinor` is the full group pot and cannot be used
+  as the member's payable amount. Returning the raw Prisma cycle omitted the
+  per-member amount and made every active status response invalid.

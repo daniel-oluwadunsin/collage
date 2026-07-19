@@ -3,7 +3,9 @@
 - Legal/compliance, KYC/AML, safeguarding/custody, consumer-protection, and
   privacy approval are outstanding.
 - Live NIN/identity verification access/provider is not confirmed. Registration
-  fails closed in production rather than accepting a mock result.
+  records NIN as `COLLECTED_UNVERIFIED` and never presents it as verified;
+  production launch remains blocked until the compliance policy and approved
+  verification provider are confirmed.
 - Monnify tokenization, direct debit, disbursement, wallet, static-IP, limits,
   settlement timing, and MFA mode require merchant-specific enablement.
 - Production OTP requires a private HTTPS SMSGate server and an online Android

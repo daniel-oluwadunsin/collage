@@ -55,6 +55,11 @@ export interface WorkflowService {
     collageId: string,
     input: unknown,
   ): Promise<ApiData>;
+  completeManualRegistration(
+    context: RequestContext,
+    collageId: string,
+    input: unknown,
+  ): Promise<ApiData>;
   getBanks(context: RequestContext): Promise<ApiData>;
   resolveBankAccount(context: RequestContext, input: unknown): Promise<ApiData>;
   getPayoutAccount(
@@ -149,6 +154,7 @@ export const unavailableWorkflowService: WorkflowService = {
   requestOtp: unavailable,
   verifyOtp: unavailable,
   confirmRules: unavailable,
+  completeManualRegistration: unavailable,
   getBanks: unavailable,
   resolveBankAccount: unavailable,
   getPayoutAccount: unavailable,

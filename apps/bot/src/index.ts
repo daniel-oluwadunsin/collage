@@ -20,7 +20,6 @@ await redis.connect();
 const bot = createCollageBot({
   token: environment.TELEGRAM_BOT_TOKEN,
   botUsername: environment.TELEGRAM_BOT_USERNAME,
-  miniAppShortName: environment.TELEGRAM_MINI_APP_SHORT_NAME,
   internalApi,
   maxRateLimitRetries: environment.TELEGRAM_RATE_LIMIT_MAX_RETRIES,
   onError: (error) => logger.error({ error }, "Telegram update failed"),
@@ -29,6 +28,11 @@ await bot.init();
 const expectedUsername = environment.TELEGRAM_BOT_USERNAME.replace(/^@/u, "");
 if (bot.botInfo.username.toLowerCase() !== expectedUsername.toLowerCase()) {
   throw new Error("TELEGRAM_BOT_USERNAME does not match the configured token");
+}
+if (!bot.botInfo.has_main_web_app) {
+  throw new Error(
+    "Telegram Main Mini App is not enabled for this bot in BotFather",
+  );
 }
 
 await bot.api.setMyCommands([
@@ -45,6 +49,7 @@ await bot.api.setWebhook(environment.TELEGRAM_WEBHOOK_PUBLIC_URL, {
 
 const notificationWorker = createTelegramNotificationWorker({
   bot,
+  botUsername: environment.TELEGRAM_BOT_USERNAME,
   internalApi,
   redis,
   concurrency: environment.TELEGRAM_NOTIFICATION_CONCURRENCY,
@@ -53,6 +58,17 @@ notificationWorker.on("failed", (job, error) => {
   logger.error(
     { deliveryId: job?.data.deliveryId, error },
     "Telegram notification delivery failed",
+  );
+});
+notificationWorker.on("completed", (job) => {
+  logger.info(
+    {
+      deliveryId: job.data.deliveryId,
+      operation: job.data.operation,
+      telegramChatId: job.data.telegramChatId,
+      type: job.data.type,
+    },
+    "Telegram notification delivered",
   );
 });
 

@@ -225,8 +225,27 @@ export const calculateMemberChargeAt = (
       break;
   }
 
+  if (toDate(candidate) < cycle.opensAt) {
+    switch (preference.kind) {
+      case "DAILY":
+        candidate = candidate.add({ days: 1 });
+        break;
+      case "WEEKLY":
+        candidate = candidate.add({ weeks: 1 });
+        break;
+      case "MONTHLY":
+        candidate = monthlyCandidate(opens.add({ months: 1 }), preference);
+        break;
+      case "YEARLY":
+        candidate = candidate.add({ years: 1 });
+        break;
+    }
+  }
   const result = toDate(candidate);
-  if (result < cycle.opensAt || result > cycle.deadlineAt) {
+  if (result > cycle.deadlineAt) {
+    return new Date(cycle.opensAt);
+  }
+  if (result < cycle.opensAt) {
     throw new DomainInvariantError(
       "CHARGE_OUTSIDE_CYCLE",
       "Preferred charge time must fall inside the cycle window.",

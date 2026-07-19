@@ -16,12 +16,14 @@ import {
 import { createRedisConnection } from "@collage/queue";
 import { LaunchTokenService, type ReplayStore } from "@collage/security";
 import { SmsGateClient, SmsGateOtpProvider } from "@collage/smsgate";
+import { z } from "zod";
 
 import { createApiApp } from "./app.js";
 import {
   DatabaseWorkflowService,
   type OtpProvider,
   type ProviderPort,
+  type TelegramMembershipPort,
 } from "./database-workflow.js";
 import { createInternalAuthenticator } from "./internal-auth.js";
 import { SessionService } from "./session.js";
@@ -76,6 +78,56 @@ class UnconfiguredOtpProvider implements OtpProvider {
     return Promise.reject(
       new Error("Production OTP provider is not configured"),
     );
+  }
+}
+
+class TelegramBotMembershipClient implements TelegramMembershipPort {
+  constructor(private readonly botToken: string) {}
+
+  async getMembership(
+    telegramChatId: string,
+    telegramUserId: string,
+  ): ReturnType<TelegramMembershipPort["getMembership"]> {
+    const response = await fetch(
+      `https://api.telegram.org/bot${this.botToken}/getChatMember`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chat_id: telegramChatId,
+          user_id: telegramUserId,
+        }),
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
+    const envelope = z
+      .object({
+        ok: z.boolean(),
+        result: z
+          .object({
+            status: z.string(),
+            is_member: z.boolean().optional(),
+          })
+          .optional(),
+      })
+      .parse(await response.json());
+    if (!response.ok || !envelope.ok || envelope.result === undefined) {
+      return { active: false };
+    }
+    if (
+      envelope.result.status === "restricted" &&
+      envelope.result.is_member !== true
+    ) {
+      return { active: false };
+    }
+    const role = {
+      member: "MEMBER",
+      administrator: "ADMINISTRATOR",
+      creator: "CREATOR",
+      restricted: "RESTRICTED",
+    }[envelope.result.status] as
+      "MEMBER" | "ADMINISTRATOR" | "CREATOR" | "RESTRICTED" | undefined;
+    return role === undefined ? { active: false } : { active: true, role };
   }
 }
 
@@ -136,6 +188,7 @@ const workflow = new DatabaseWorkflowService({
   encryption,
   hashKey: Buffer.from(environment.APP_HASH_PEPPER, "utf8"),
   launchTokens,
+  logger,
   miniAppUrl: environment.MINI_APP_PUBLIC_URL,
   monnify,
   otp,
@@ -145,6 +198,10 @@ const workflow = new DatabaseWorkflowService({
   publicUrl: environment.API_PUBLIC_URL,
   sessions,
   telegramBotToken: environment.TELEGRAM_BOT_TOKEN,
+  telegramInitDataMaxAgeSeconds: environment.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+  telegramMembership: new TelegramBotMembershipClient(
+    environment.TELEGRAM_BOT_TOKEN,
+  ),
 });
 const webhookIngress =
   environment.MONNIFY_SECRET_KEY.length === 0

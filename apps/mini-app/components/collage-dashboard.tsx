@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-misused-promises, @typescript-eslint/restrict-template-expressions */
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Banknote,
@@ -12,7 +12,7 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
-import { useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -26,10 +26,12 @@ import {
   paymentSetupSchema,
   resolvedAccountSchema,
   type Collage,
+  type Registration,
   type ResolvedAccount,
   type Status,
 } from "../lib/schemas";
 import { useApi } from "./providers";
+import { RegistrationFlow } from "./registration-flow";
 import {
   AsyncButton,
   Button,
@@ -50,22 +52,56 @@ type DashboardTab = "history" | "overview" | "settings";
 export function CollageDashboard({
   status,
   action,
+  registration,
 }: {
   readonly status: Status;
   readonly action: string;
+  readonly registration: Registration;
 }): JSX.Element {
+  const hasMember = "id" in registration;
+  const hasPayoutAccount =
+    hasMember &&
+    (registration.bankAccounts ?? []).some(
+      (account) => account.state === "VERIFIED",
+    );
+  const hasActivePaymentMethod =
+    hasMember &&
+    (registration.paymentMethods ?? []).some(
+      (method) => method.state === "ACTIVE",
+    );
+  const hasPendingPaymentMethod =
+    hasMember &&
+    (registration.paymentMethods ?? []).some(
+      (method) => method.state === "AUTHORIZING",
+    );
+  const readyForPaymentMethod =
+    hasMember &&
+    registration.phoneVerifiedAt != null &&
+    registration.payoutPosition !== null &&
+    registration.acceptedRuleVersionId != null &&
+    registration.recurringConsentAt != null &&
+    hasPayoutAccount;
   const [tab, setTab] = useState<DashboardTab>("overview");
   const [operation, setOperation] = useState<
-    "manual" | "payout-account" | "payment-method" | null
+    "manual" | "payout-account" | "payment-method" | "registration" | null
   >(
-    action === "PAY_CONTRIBUTION"
-      ? "manual"
-      : action === "UPDATE_PAYOUT_ACCOUNT"
-        ? "payout-account"
-        : action === "REPLACE_PAYMENT_METHOD"
-          ? "payment-method"
-          : null,
+    action === "JOIN_COLLAGE"
+      ? "registration"
+      : action === "PAY_CONTRIBUTION"
+        ? "manual"
+        : action === "UPDATE_PAYOUT_ACCOUNT"
+          ? "payout-account"
+          : action === "REPLACE_PAYMENT_METHOD"
+            ? "payment-method"
+            : null,
   );
+  if (operation === "registration")
+    return (
+      <RegistrationFlow
+        collage={status.collage}
+        initialRegistration={registration}
+      />
+    );
   if (operation === "manual")
     return (
       <ManualPaymentFlow
@@ -77,6 +113,7 @@ export function CollageDashboard({
   if (operation === "payout-account")
     return (
       <UpdatePayoutAccountFlow
+        existing={hasPayoutAccount}
         collage={status.collage}
         onClose={() => setOperation(null)}
       />
@@ -84,6 +121,7 @@ export function CollageDashboard({
   if (operation === "payment-method")
     return (
       <ReplacePaymentMethodFlow
+        replace={hasActivePaymentMethod}
         collage={status.collage}
         onClose={() => setOperation(null)}
       />
@@ -113,28 +151,81 @@ export function CollageDashboard({
         ))}
       </nav>
       {tab === "overview" ? (
-        <Overview onManual={() => setOperation("manual")} status={status} />
+        <Overview
+          onJoin={() => setOperation("registration")}
+          onManual={() => setOperation("manual")}
+          registration={registration}
+          status={status}
+        />
       ) : null}
       {tab === "history" ? <CollageHistory collage={status.collage} /> : null}
       {tab === "settings" ? (
         <section className="operation-list">
           <h2>Your financial details</h2>
-          <button onClick={() => setOperation("payout-account")} type="button">
-            <Landmark aria-hidden="true" />
-            <span>
-              <strong>Update payout account</strong>
-              <small>Validate a new future payout destination</small>
-            </span>
-            <ArrowRight aria-hidden="true" />
-          </button>
-          <button onClick={() => setOperation("payment-method")} type="button">
-            <CreditCard aria-hidden="true" />
-            <span>
-              <strong>Replace payment method</strong>
-              <small>The current method remains active during setup</small>
-            </span>
-            <ArrowRight aria-hidden="true" />
-          </button>
+          {!hasMember ||
+          (!readyForPaymentMethod &&
+            !hasActivePaymentMethod &&
+            !hasPendingPaymentMethod) ? (
+            <button onClick={() => setOperation("registration")} type="button">
+              <Users aria-hidden="true" />
+              <span>
+                <strong>
+                  {hasMember ? "Continue your opt-in" : "Opt in as a member"}
+                </strong>
+                <small>Complete your required member details securely</small>
+              </span>
+              <ArrowRight aria-hidden="true" />
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => setOperation("payout-account")}
+                type="button"
+              >
+                <Landmark aria-hidden="true" />
+                <span>
+                  <strong>
+                    {hasPayoutAccount
+                      ? "Update payout account"
+                      : "Add payout account"}
+                  </strong>
+                  <small>
+                    {hasPayoutAccount
+                      ? "Validate a new future payout destination"
+                      : "Add and validate your payout destination"}
+                  </small>
+                </span>
+                <ArrowRight aria-hidden="true" />
+              </button>
+              <button
+                onClick={() =>
+                  setOperation(
+                    hasPendingPaymentMethod ? "registration" : "payment-method",
+                  )
+                }
+                type="button"
+              >
+                <CreditCard aria-hidden="true" />
+                <span>
+                  <strong>
+                    {hasActivePaymentMethod
+                      ? "Replace payment method"
+                      : hasPendingPaymentMethod
+                        ? "Continue payment setup"
+                        : "Add payment method"}
+                  </strong>
+                  <small>
+                    {hasActivePaymentMethod
+                      ? "The current method remains active during setup"
+                      : hasPendingPaymentMethod
+                        ? "Finish the pending provider authorization"
+                        : "Authorize a method for automatic contributions"}
+                  </small>
+                </span>
+                <ArrowRight aria-hidden="true" />
+              </button>
+            </>
+          )}
         </section>
       ) : null}
     </>
@@ -144,9 +235,13 @@ export function CollageDashboard({
 function Overview({
   status,
   onManual,
+  onJoin,
+  registration,
 }: {
   readonly status: Status;
   readonly onManual: () => void;
+  readonly onJoin: () => void;
+  readonly registration: Registration;
 }): JSX.Element {
   const cycle = status.currentCycle;
   if (cycle === null) {
@@ -186,6 +281,13 @@ function Overview({
           remain. The Collage starts only after every position and payment
           method is confirmed.
         </p>
+        {registration.state === "REGISTERED" ? null : (
+          <Button onClick={onJoin} type="button">
+            {"id" in registration
+              ? "Continue your opt-in"
+              : "Opt in as a member"}
+          </Button>
+        )}
       </section>
     );
   }
@@ -326,31 +428,36 @@ function ManualPaymentFlow({
   readonly onClose: () => void;
 }): JSX.Element {
   const { api } = useApi();
+  const attemptStorageKey = `collage-manual-attempt:${collage.id}:${String(cycle?.number ?? "none")}`;
   const [attemptId, setAttemptId] = useState<string | null>(() =>
-    window.sessionStorage.getItem("collage-manual-attempt-id"),
+    window.sessionStorage.getItem(attemptStorageKey),
   );
   const [lastCheckedAt, setLastCheckedAt] = useState<number>();
-  const form = useForm<EmailInput>({
-    resolver: zodResolver(emailSchema),
-    mode: "onBlur",
-  });
   const setup = useMutation({
-    mutationFn: (value: EmailInput) =>
+    mutationFn: () =>
       api.request(
         `/collages/${collage.id}/cycles/current/payments/manual`,
         manualSetupSchema,
-        json({ ...value, idempotencyKey: createIdempotencyKey() }),
+        json({}),
       ),
     onSuccess: (result) => {
       setAttemptId(result.attemptId);
-      window.sessionStorage.setItem(
-        "collage-manual-attempt-id",
-        result.attemptId,
-      );
+      window.sessionStorage.setItem(attemptStorageKey, result.attemptId);
       if (result.checkoutUrl !== null)
         window.location.assign(result.checkoutUrl);
     },
   });
+  const startCheckout = setup.mutate;
+  useEffect(() => {
+    if (
+      cycle !== null &&
+      attemptId === null &&
+      !setup.isPending &&
+      !setup.isError
+    ) {
+      startCheckout();
+    }
+  }, [attemptId, cycle, setup.isError, setup.isPending, startCheckout]);
   const attempt = useQuery({
     queryKey: ["payment-attempt", attemptId],
     queryFn: async () => {
@@ -395,6 +502,46 @@ function ManualPaymentFlow({
         />
       </>
     );
+  if (
+    attempt.data !== undefined &&
+    terminalPaymentStates.has(attempt.data.state)
+  )
+    return (
+      <StatePage
+        action={
+          <Button
+            onClick={() => {
+              window.sessionStorage.removeItem(attemptStorageKey);
+              setAttemptId(null);
+              setup.reset();
+            }}
+            type="button"
+          >
+            Start a new checkout
+          </Button>
+        }
+        description="The previous checkout reached a final unsuccessful state. Collage did not record a payment."
+        title="Checkout was not completed"
+        variant="error"
+      />
+    );
+  if (attempt.isError)
+    return (
+      <StatePage
+        action={
+          <Button onClick={() => void attempt.refetch()} type="button">
+            Check again
+          </Button>
+        }
+        description={
+          attempt.error instanceof ApiError
+            ? attempt.error.message
+            : "Collage could not load the payment attempt. No payment was recorded."
+        }
+        title="Payment status unavailable"
+        variant="error"
+      />
+    );
   if (attemptId !== null)
     return (
       <ProviderPendingState
@@ -412,6 +559,23 @@ function ManualPaymentFlow({
         }}
       />
     );
+  if (setup.isError)
+    return (
+      <StatePage
+        action={
+          <Button onClick={() => setup.reset()} type="button">
+            Try checkout again
+          </Button>
+        }
+        description={
+          setup.error instanceof ApiError
+            ? setup.error.message
+            : "Collage could not prepare a secure checkout. No payment was recorded."
+        }
+        title="Checkout could not be prepared"
+        variant="error"
+      />
+    );
   return (
     <>
       <ContextHeader
@@ -419,10 +583,7 @@ function ManualPaymentFlow({
         cycle={cycle.number}
         detail={`Recipient: payout position ${cycle.number} · Due ${formatDate(cycle.deadlineAt)}`}
       />
-      <form
-        className="flow"
-        onSubmit={form.handleSubmit((value) => setup.mutate(value))}
-      >
+      <div className="flow">
         <div className="flow-heading">
           <Banknote aria-hidden="true" size={22} />
           <div>
@@ -449,30 +610,17 @@ function ManualPaymentFlow({
           />
           <Summary term="Source" value="Your provider checkout method" />
         </dl>
-        <Field
-          error={form.formState.errors.customerEmail?.message}
-          label="Receipt email"
-        >
-          <Input type="email" {...form.register("customerEmail")} />
-        </Field>
-        {setup.error instanceof ApiError &&
-        setup.error.code === "NO_PAYABLE_CONTRIBUTION" ? (
-          <div className="attention-note">
-            This contribution is already paid or no longer payable. Refresh the
-            current status before taking another action.
-          </div>
-        ) : null}
-        <AsyncButton
-          busy={setup.isPending}
-          busyLabel="Checking obligation…"
-          type="submit"
-        >
-          Continue to secure checkout
-        </AsyncButton>
+        <ProviderPendingState
+          amountMinor={cycle.amountPerMemberMinor}
+          collage={collage}
+          cycle={cycle.number}
+          onRecheck={startCheckout}
+          title="Preparing your secure checkout"
+        />
         <Button onClick={onClose} type="button" variant="ghost">
           Cancel
         </Button>
-      </form>
+      </div>
     </>
   );
 }
@@ -486,11 +634,14 @@ type AccountInput = z.infer<typeof accountSchema>;
 function UpdatePayoutAccountFlow({
   collage,
   onClose,
+  existing,
 }: {
   readonly collage: Collage;
   readonly onClose: () => void;
+  readonly existing: boolean;
 }): JSX.Element {
   const { api } = useApi();
+  const queryClient = useQueryClient();
   const [resolved, setResolved] = useState<ResolvedAccount | null>(null);
   const [draft, setDraft] = useState<AccountInput>();
   const form = useForm<AccountInput>({
@@ -525,13 +676,17 @@ function UpdatePayoutAccountFlow({
         putJson({ ...draft, resolutionToken: resolved.resolutionToken }),
       );
     },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["registration", collage.id],
+      }),
   });
   if (save.isSuccess)
     return (
       <StatePage
         action={<Button onClick={onClose}>Return to Collage</Button>}
         description={`${save.data.bankName} ${save.data.maskedAccountNumber} is now the verified destination for future payout attempts. Completed payouts were not changed.`}
-        title="Payout account updated"
+        title={existing ? "Payout account updated" : "Payout account added"}
         variant="success"
       />
     );
@@ -548,10 +703,12 @@ function UpdatePayoutAccountFlow({
         <div className="flow-heading">
           <Landmark aria-hidden="true" size={22} />
           <div>
-            <h2>Update payout destination</h2>
-            <p>
-              Resolve and confirm the official account name before replacement.
-            </p>
+            <h2>
+              {existing
+                ? "Update payout destination"
+                : "Add payout destination"}
+            </h2>
+            <p>Resolve and confirm the official account name before saving.</p>
           </div>
         </div>
         <Field label="Bank">
@@ -593,7 +750,7 @@ function UpdatePayoutAccountFlow({
               onClick={() => save.mutate()}
               type="button"
             >
-              Confirm new payout account
+              {existing ? "Confirm new payout account" : "Add payout account"}
             </AsyncButton>
           </div>
         )}
@@ -608,9 +765,11 @@ function UpdatePayoutAccountFlow({
 function ReplacePaymentMethodFlow({
   collage,
   onClose,
+  replace: isReplacement,
 }: {
   readonly collage: Collage;
   readonly onClose: () => void;
+  readonly replace: boolean;
 }): JSX.Element {
   const { api } = useApi();
   const [pending, setPending] = useState(false);
@@ -618,10 +777,12 @@ function ReplacePaymentMethodFlow({
     resolver: zodResolver(emailSchema),
     mode: "onBlur",
   });
-  const replace = useMutation({
+  const setup = useMutation({
     mutationFn: (value: EmailInput) =>
       api.request(
-        `/collages/${collage.id}/me/payment-methods/replace/card`,
+        isReplacement
+          ? `/collages/${collage.id}/me/payment-methods/replace/card`
+          : `/collages/${collage.id}/me/payment-methods/card/setup`,
         paymentSetupSchema,
         json({ ...value, idempotencyKey: createIdempotencyKey() }),
       ),
@@ -638,8 +799,12 @@ function ReplacePaymentMethodFlow({
   if (pending)
     return (
       <StatePage
-        description="The new card is authorizing. Your current payment method remains active until Collage verifies and activates the replacement."
-        title="Replacement pending"
+        description={
+          isReplacement
+            ? "The new card is authorizing. Your current payment method remains active until Collage verifies and activates the replacement."
+            : "Your card is authorizing. Collage will add it only after the provider payment is verified."
+        }
+        title={isReplacement ? "Replacement pending" : "Setup pending"}
         variant="pending"
       />
     );
@@ -647,18 +812,28 @@ function ReplacePaymentMethodFlow({
     <>
       <ContextHeader
         collage={collage}
-        detail="Current method remains active during replacement"
+        detail={
+          isReplacement
+            ? "Current method remains active during replacement"
+            : "No payment method is active yet"
+        }
       />
       <form
         className="flow"
-        onSubmit={form.handleSubmit((value) => replace.mutate(value))}
+        onSubmit={form.handleSubmit((value) => setup.mutate(value))}
       >
         <div className="flow-heading">
           <CreditCard aria-hidden="true" size={22} />
           <div>
-            <h2>Replace saved payment method</h2>
+            <h2>
+              {isReplacement
+                ? "Replace saved payment method"
+                : "Add payment method"}
+            </h2>
             <p>
-              A pending or failed setup never deactivates your existing method.
+              {isReplacement
+                ? "A pending or failed setup never deactivates your existing method."
+                : "The method becomes active only after server-side provider verification."}
             </p>
           </div>
         </div>
@@ -677,15 +852,19 @@ function ReplacePaymentMethodFlow({
           />
           <Summary
             term="Current source"
-            value="Existing method remains active"
+            value={
+              isReplacement ? "Existing method remains active" : "None yet"
+            }
           />
         </dl>
         <AsyncButton
-          busy={replace.isPending}
-          busyLabel="Creating replacement…"
+          busy={setup.isPending}
+          busyLabel={
+            isReplacement ? "Creating replacement…" : "Creating setup…"
+          }
           type="submit"
         >
-          Authorize replacement card
+          {isReplacement ? "Authorize replacement card" : "Authorize card"}
         </AsyncButton>
         <Button onClick={onClose} type="button" variant="ghost">
           Cancel

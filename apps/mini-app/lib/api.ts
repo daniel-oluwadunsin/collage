@@ -14,6 +14,7 @@ const errorEnvelopeSchema = z.object({
     code: z.string(),
     message: z.string(),
     details: z.unknown().optional(),
+    requestId: z.string().optional(),
   }),
   requestId: z.string().optional(),
 });
@@ -23,6 +24,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -39,7 +41,7 @@ export interface ApiTransport {
 
 const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/u, "") ??
-  "http://localhost:4000/v1";
+  "https://7bd1-84-17-45-159.ngrok-free.app/v1";
 
 export class HttpApiTransport implements ApiTransport {
   constructor(private readonly getToken: () => string | null) {}
@@ -68,6 +70,9 @@ export class HttpApiTransport implements ApiTransport {
         parsed.success
           ? parsed.data.error.message
           : "Collage could not complete this request.",
+        parsed.success
+          ? (parsed.data.error.requestId ?? parsed.data.requestId)
+          : undefined,
       );
     }
     const envelope = envelopeSchema.safeParse(raw);

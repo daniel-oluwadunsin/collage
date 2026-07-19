@@ -11,7 +11,7 @@ import type {
 } from "../generated/client/client.js";
 import type { Prisma } from "../generated/client/client.js";
 import type { PrismaClient } from "./client.js";
-import { appendOutboxEvent } from "./event-repositories.js";
+import { appendAuditLog, appendOutboxEvent } from "./event-repositories.js";
 import { lockCollage, lockCycle, lockMember, lockPayout } from "./locks.js";
 import {
   withSerializableTransaction,
@@ -59,7 +59,7 @@ export const reservePayoutPosition = (
 export interface RegistrationEvidence {
   readonly acceptedRuleVersionId: string;
   readonly identityVerificationMode: string;
-  readonly identityVerifiedAt: Date;
+  readonly identityVerifiedAt: Date | null;
   readonly legalNameEncrypted: string;
   readonly ninEncrypted: string;
   readonly ninHash: string;
@@ -81,6 +81,7 @@ export const completeRegistration = (
   evidence: RegistrationEvidence,
   correlationId: string,
   now = new Date(),
+  options: { readonly requireActivePaymentMethod?: boolean } = {},
 ): Promise<RegistrationResult> =>
   withSerializableTransaction(client, async (transaction) => {
     await lockMember(transaction, memberId);
@@ -105,17 +106,27 @@ export const completeRegistration = (
         where: { memberId, state: "VERIFIED", isDefault: true },
       }),
     ]);
+    const requireActivePaymentMethod =
+      options.requireActivePaymentMethod ?? true;
+    const hasValidIdentityEvidence =
+      evidence.identityVerificationMode === "COLLECTED_UNVERIFIED"
+        ? evidence.identityVerifiedAt === null
+        : evidence.identityVerifiedAt !== null;
     if (
       member.collage.state !== "REGISTRATION_OPEN" ||
-      member.state !== "PAYMENT_METHOD_AUTHORIZING" ||
+      member.state !==
+        (requireActivePaymentMethod
+          ? "PAYMENT_METHOD_AUTHORIZING"
+          : "PAYMENT_METHOD_REQUIRED") ||
       member.payoutPosition === null ||
       rule?.version !== member.collage.currentRuleVersion ||
-      paymentMethod === null ||
+      !hasValidIdentityEvidence ||
+      (requireActivePaymentMethod && paymentMethod === null) ||
       bankAccount === null
     ) {
       throw new Error("Registration evidence is incomplete or stale");
     }
-    await transaction.collageMember.update({
+    const registeredMember = await transaction.collageMember.update({
       where: { id: memberId },
       data: {
         ...evidence,
@@ -123,6 +134,14 @@ export const completeRegistration = (
         registeredAt: now,
         version: { increment: 1 },
       },
+    });
+    await appendOutboxEvent(transaction, {
+      eventType: "registration.completed",
+      aggregateType: "collage-member",
+      aggregateId: memberId,
+      aggregateVersion: registeredMember.version,
+      correlationId,
+      payload: { collageId: member.collageId, memberId },
     });
     await transaction.payoutPositionReservation.updateMany({
       where: {
@@ -159,6 +178,7 @@ export const completeRegistration = (
       data: {
         state: "STARTING",
         startedAt: now,
+        firstCycleStartAt: now,
         rulesLockedAt: now,
         version: { increment: 1 },
       },
@@ -219,6 +239,89 @@ export const activateReplacementPaymentMethod = (
     return transaction.paymentMethod.update({
       where: { id: replacement.id },
       data: { state: "ACTIVE", ...activation },
+    });
+  });
+
+export const rejectCardAuthorizationWithoutReusableToken = (
+  client: PrismaClient,
+  authorizationId: string,
+  correlationId: string,
+  source: "api" | "worker",
+): Promise<void> =>
+  withSerializableTransaction(client, async (transaction) => {
+    const authorization = await transaction.cardAuthorization.findUniqueOrThrow(
+      {
+        where: { id: authorizationId },
+        include: { paymentMethod: true },
+      },
+    );
+    await lockMember(transaction, authorization.paymentMethod.memberId);
+    if (authorization.state === "FAILED_TERMINAL") return;
+    await transaction.cardAuthorization.update({
+      where: { id: authorization.id },
+      data: { state: "FAILED_TERMINAL" },
+    });
+    await transaction.paymentMethod.updateMany({
+      where: {
+        id: authorization.paymentMethodId,
+        state: "AUTHORIZING",
+      },
+      data: { state: "FAILED" },
+    });
+    await transaction.collageMember.updateMany({
+      where: {
+        id: authorization.paymentMethod.memberId,
+        state: "PAYMENT_METHOD_AUTHORIZING",
+      },
+      data: { state: "PAYMENT_METHOD_REQUIRED" },
+    });
+    await appendAuditLog(transaction, {
+      actorType: "SYSTEM",
+      action: "card-authorization.reusable-token-unavailable",
+      correlationId,
+      entityType: "card-authorization",
+      entityId: authorization.id,
+      source,
+      safeMetadata: {},
+    });
+  });
+
+export const rejectDirectDebitMandate = (
+  client: PrismaClient,
+  mandateId: string,
+  correlationId: string,
+  source: "api" | "worker",
+): Promise<void> =>
+  withSerializableTransaction(client, async (transaction) => {
+    const mandate = await transaction.directDebitMandate.findUniqueOrThrow({
+      where: { id: mandateId },
+      include: { paymentMethod: true },
+    });
+    await lockMember(transaction, mandate.paymentMethod.memberId);
+    if (mandate.state === "FAILED_TERMINAL") return;
+    await transaction.directDebitMandate.update({
+      where: { id: mandate.id },
+      data: { state: "FAILED_TERMINAL" },
+    });
+    await transaction.paymentMethod.updateMany({
+      where: { id: mandate.paymentMethodId, state: "AUTHORIZING" },
+      data: { state: "FAILED" },
+    });
+    await transaction.collageMember.updateMany({
+      where: {
+        id: mandate.paymentMethod.memberId,
+        state: "PAYMENT_METHOD_AUTHORIZING",
+      },
+      data: { state: "PAYMENT_METHOD_REQUIRED" },
+    });
+    await appendAuditLog(transaction, {
+      actorType: "SYSTEM",
+      action: "direct-debit-mandate.authorization-failed",
+      correlationId,
+      entityType: "direct-debit-mandate",
+      entityId: mandate.id,
+      source,
+      safeMetadata: {},
     });
   });
 

@@ -5,19 +5,25 @@ import {
   appendAuditLog,
   appendOutboxEvent,
   activateReplacementPaymentMethod,
+  completeRegistration,
+  lockContribution,
   markMemberLeftTelegram,
+  rejectCardAuthorizationWithoutReusableToken,
+  rejectDirectDebitMandate,
   type Prisma,
   type PrismaClient,
   reservePayoutPosition,
   withSerializableTransaction,
 } from "@collage/database";
-import type {
-  AccountValidation,
-  Bank,
-  CheckoutInitialization,
-  MandateResult,
-  MonnifyClient,
-  TransactionVerification,
+import type { createLogger } from "@collage/logger";
+import {
+  MonnifyError,
+  type AccountValidation,
+  type Bank,
+  type CheckoutInitialization,
+  type MandateResult,
+  type MonnifyClient,
+  type TransactionVerification,
 } from "@collage/monnify";
 import {
   constantTimeEqual,
@@ -42,6 +48,9 @@ const money = z
 const idempotencyKey = z.string().min(8).max(191);
 const accountNumber = z.string().regex(/^\d{10}$/u);
 const phone = z.string().regex(/^\+[1-9]\d{7,14}$/u);
+export const CARD_SETUP_AMOUNT_MINOR = 5_000n;
+export const CARD_SETUP_POLICY = "COMMITMENT_DEPOSIT" as const;
+const PERSISTENT_LAUNCH_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000;
 
 const asData = (value: unknown): ApiData => serializeForDto(value) as ApiData;
 
@@ -56,6 +65,17 @@ const conflict = (code: string, message: string): ApiError =>
 
 const notFound = (entity: string): ApiError =>
   new ApiError(404, "NOT_FOUND", `${entity} was not found.`);
+
+const telegramInitDataErrorCode = (error: unknown): string => {
+  if (!(error instanceof Error)) return "TELEGRAM_INIT_DATA_INVALID";
+  if (error.message === "Telegram init-data signature is invalid") {
+    return "TELEGRAM_INIT_DATA_SIGNATURE_INVALID";
+  }
+  if (error.message === "Telegram init data has expired or is not yet valid") {
+    return "TELEGRAM_INIT_DATA_EXPIRED";
+  }
+  return "TELEGRAM_INIT_DATA_MALFORMED";
+};
 
 export interface OtpProvider {
   send(input: {
@@ -85,11 +105,25 @@ export interface ProviderPort {
   ): Promise<TransactionVerification>;
 }
 
+export interface TelegramMembershipPort {
+  getMembership(
+    telegramChatId: string,
+    telegramUserId: string,
+  ): Promise<
+    | {
+        readonly active: true;
+        readonly role: "MEMBER" | "ADMINISTRATOR" | "CREATOR" | "RESTRICTED";
+      }
+    | { readonly active: false }
+  >;
+}
+
 export interface DatabaseWorkflowOptions {
   readonly client: PrismaClient;
   readonly encryption: EncryptionKeyring;
   readonly hashKey: Buffer;
   readonly launchTokens: LaunchTokenService;
+  readonly logger?: ReturnType<typeof createLogger>;
   readonly miniAppUrl: string;
   readonly monnify: ProviderPort;
   readonly otp: OtpProvider;
@@ -99,6 +133,8 @@ export interface DatabaseWorkflowOptions {
   readonly publicUrl: string;
   readonly sessions: SessionService;
   readonly telegramBotToken: string;
+  readonly telegramInitDataMaxAgeSeconds: number;
+  readonly telegramMembership: TelegramMembershipPort;
 }
 
 const bootstrapSchema = z.object({
@@ -106,17 +142,10 @@ const bootstrapSchema = z.object({
   launchToken: z.string().min(20).max(256).optional(),
 });
 
-const createCollageSchema = z.object({
-  cardSetupAmountMinor: money,
-  cardSetupPolicy: z.enum([
-    "COMMITMENT_DEPOSIT",
-    "FIRST_CONTRIBUTION",
-    "SANDBOX_SIMULATION",
-  ]),
+export const createCollageSchema = z.object({
   contributionAmountMinor: money,
   cycleDeadlineOffsetMinutes: z.number().int().min(0),
   description: z.string().max(1_000).default(""),
-  firstCycleStartAt: z.iso.datetime(),
   frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
   frequencyInterval: z.number().int().min(1).max(365),
   gracePeriodMinutes: z.number().int().min(0),
@@ -128,23 +157,89 @@ const createCollageSchema = z.object({
   timezone: z.string().min(1).max(64),
 });
 
+export const paymentMethodOperationError = (input: {
+  readonly active: boolean;
+  readonly authorizing: boolean;
+  readonly operation: "add" | "replace";
+}):
+  | {
+      readonly code: string;
+      readonly message: string;
+    }
+  | undefined => {
+  if (input.authorizing) {
+    return {
+      code: "PAYMENT_METHOD_AUTHORIZATION_PENDING",
+      message:
+        "Finish or resolve the pending payment-method authorization first.",
+    };
+  }
+  if (input.operation === "add" && input.active) {
+    return {
+      code: "PAYMENT_METHOD_ALREADY_EXISTS",
+      message: "Use the replacement flow for an existing payment method.",
+    };
+  }
+  if (input.operation === "replace" && !input.active) {
+    return {
+      code: "PAYMENT_METHOD_NOT_FOUND",
+      message: "Add a payment method before using the replacement flow.",
+    };
+  }
+  return undefined;
+};
+
 const registrationIdentitySchema = z.object({
   stage: z.literal("IDENTITY"),
   legalName: z.string().trim().min(3).max(160),
   nin: z.string().regex(/^\d{11}$/u),
 });
 
+const chargePreferenceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("DAILY"),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+  z.object({
+    kind: z.literal("WEEKLY"),
+    weekday: z.number().int().min(1).max(7),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+  z.object({
+    kind: z.literal("MONTHLY"),
+    ordinal: z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal("last"),
+    ]),
+    weekday: z.number().int().min(1).max(7),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+  z.object({
+    kind: z.literal("YEARLY"),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(31),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+]);
+
 const registrationPreferencesSchema = z.object({
   stage: z.literal("PREFERENCES"),
   payoutPosition: z.number().int().positive(),
-  preferredChargeRule: z.record(z.string(), z.unknown()),
+  preferredChargeRule: chargePreferenceSchema,
 });
 
 const registrationLegacySchema = z.object({
   legalName: z.string().trim().min(3).max(160),
   nin: z.string().regex(/^\d{11}$/u),
   payoutPosition: z.number().int().positive(),
-  preferredChargeRule: z.record(z.string(), z.unknown()),
+  preferredChargeRule: chargePreferenceSchema,
 });
 
 const registrationSchema = z.union([
@@ -163,19 +258,40 @@ const cardSchema = z.object({
   idempotencyKey,
 });
 
-const mandateSchema = z.object({
-  accountNumber,
-  address: z.string().min(5).max(250),
-  bankCode: z.string().min(2).max(16),
-  customerEmail: z.email(),
-  endDate: z.iso.date(),
-  idempotencyKey,
-  startDate: z.iso.date(),
-});
+export const mandateSchema = z
+  .object({
+    accountNumber,
+    address: z.string().min(5).max(250),
+    bankCode: z.string().min(2).max(16),
+    customerEmail: z.email(),
+    endDate: z.iso.datetime({ offset: true }),
+    idempotencyKey,
+    startDate: z.iso.datetime({ offset: true }),
+  })
+  .superRefine((value, context) => {
+    const start = new Date(value.startDate);
+    if (start.getTime() <= Date.now()) {
+      context.addIssue({
+        code: "custom",
+        path: ["startDate"],
+        message: "Mandate start date must be in the future.",
+      });
+    }
+    if (new Date(value.endDate) <= start) {
+      context.addIssue({
+        code: "custom",
+        path: ["endDate"],
+        message: "Mandate end date must be after the start date.",
+      });
+    }
+  });
 
 const manualSchema = z.object({
+  idempotencyKey: idempotencyKey.optional(),
+});
+
+const manualRegistrationSchema = z.object({
   customerEmail: z.email(),
-  idempotencyKey,
 });
 
 export class DatabaseWorkflowService implements WorkflowService {
@@ -188,11 +304,15 @@ export class DatabaseWorkflowService implements WorkflowService {
       verified = verifyTelegramInitData(
         value.initData,
         this.options.telegramBotToken,
+        {
+          maxAgeSeconds: this.options.telegramInitDataMaxAgeSeconds,
+        },
       );
-    } catch {
+    } catch (error) {
+      console.log(error);
       throw new ApiError(
         401,
-        "TELEGRAM_INIT_DATA_INVALID",
+        telegramInitDataErrorCode(error),
         "Telegram Mini App authentication failed.",
       );
     }
@@ -249,7 +369,34 @@ export class DatabaseWorkflowService implements WorkflowService {
           },
         });
       if (membership?.state !== "ACTIVE") {
-        throw forbidden();
+        const verifiedMembership =
+          await this.options.telegramMembership.getMembership(
+            launchChat?.telegramChatId ?? "",
+            telegramUserId,
+          );
+        if (!verifiedMembership.active) throw forbidden();
+        await this.options.client.telegramChatMembership.upsert({
+          where: {
+            chatId_userId: {
+              chatId: launch.chatId,
+              userId: identity.userId,
+            },
+          },
+          create: {
+            chatId: launch.chatId,
+            userId: identity.userId,
+            role: verifiedMembership.role,
+            state: "ACTIVE",
+            joinedAt: new Date(),
+            lastSeenAt: new Date(),
+          },
+          update: {
+            role: verifiedMembership.role,
+            state: "ACTIVE",
+            leftAt: null,
+            lastSeenAt: new Date(),
+          },
+        });
       }
     }
     if (launch?.collageId !== undefined) {
@@ -395,7 +542,14 @@ export class DatabaseWorkflowService implements WorkflowService {
     ) {
       throw forbidden();
     }
-    const rules = value.rules as Prisma.InputJsonValue;
+    const canonicalRules = {
+      ...value.rules,
+      automaticStartWhenRegistrationFull: true,
+      cardSetupAmountMinor: CARD_SETUP_AMOUNT_MINOR.toString(),
+      cardSetupPolicy: CARD_SETUP_POLICY,
+    };
+    const rules = canonicalRules as Prisma.InputJsonValue;
+    const createdAt = new Date();
     const collage = await withSerializableTransaction(
       this.options.client,
       async (transaction) => {
@@ -410,19 +564,21 @@ export class DatabaseWorkflowService implements WorkflowService {
             frequency: value.frequency,
             frequencyInterval: value.frequencyInterval,
             timezone: value.timezone,
-            firstCycleStartAt: new Date(value.firstCycleStartAt),
+            // This provisional anchor is replaced transactionally when the
+            // final required member completes registration.
+            firstCycleStartAt: createdAt,
             cycleDeadlineOffsetMinutes: value.cycleDeadlineOffsetMinutes,
             gracePeriodMinutes: value.gracePeriodMinutes,
             payoutTiming: value.payoutTiming,
-            cardSetupPolicy: value.cardSetupPolicy,
-            cardSetupAmountMinor: value.cardSetupAmountMinor,
+            cardSetupPolicy: CARD_SETUP_POLICY,
+            cardSetupAmountMinor: CARD_SETUP_AMOUNT_MINOR,
           },
         });
         await transaction.collageRuleVersion.create({
           data: {
             collageId: created.id,
             version: 1,
-            deterministicHash: deterministicHash(value.rules),
+            deterministicHash: deterministicHash(canonicalRules),
             rules,
             createdByUserId: context.principal.userId,
           },
@@ -519,11 +675,31 @@ export class DatabaseWorkflowService implements WorkflowService {
     collageId: string,
   ): Promise<ApiData> {
     await this.assertAdmin(context, collageId);
-    const changed = await this.options.client.collage.updateMany({
-      where: { id: collageId, state: "DRAFT" },
-      data: { state: "REGISTRATION_OPEN", version: { increment: 1 } },
-    });
-    if (changed.count !== 1) {
+    const opened = await withSerializableTransaction(
+      this.options.client,
+      async (transaction) => {
+        const collage = await transaction.collage.findUnique({
+          where: { id: collageId },
+          select: { state: true, version: true },
+        });
+        if (collage?.state !== "DRAFT") return false;
+        const changed = await transaction.collage.updateMany({
+          where: { id: collageId, state: "DRAFT", version: collage.version },
+          data: { state: "REGISTRATION_OPEN", version: { increment: 1 } },
+        });
+        if (changed.count !== 1) return false;
+        await appendOutboxEvent(transaction, {
+          eventType: "collage.created",
+          aggregateType: "collage",
+          aggregateId: collageId,
+          aggregateVersion: collage.version + 1,
+          correlationId: context.requestId,
+          payload: { collageId },
+        });
+        return true;
+      },
+    );
+    if (!opened) {
       throw conflict(
         "REGISTRATION_NOT_OPENED",
         "Registration cannot be opened from the current state.",
@@ -548,7 +724,17 @@ export class DatabaseWorkflowService implements WorkflowService {
         orderBy: { number: "asc" },
       }),
     ]);
-    return asData({ collage, memberCounts: members, currentCycle });
+    return asData({
+      collage,
+      memberCounts: members,
+      currentCycle:
+        currentCycle === null
+          ? null
+          : {
+              ...currentCycle,
+              amountPerMemberMinor: collage.contributionAmountMinor,
+            },
+    });
   }
 
   async getRules(context: RequestContext, collageId: string): Promise<ApiData> {
@@ -570,7 +756,7 @@ export class DatabaseWorkflowService implements WorkflowService {
   ): Promise<ApiData> {
     const collage = await this.collageForUser(context, collageId);
     const members = await this.options.client.collageMember.findMany({
-      where: { collageId },
+      where: { collageId, payoutPosition: { not: null } },
       select: {
         payoutPosition: true,
         state: true,
@@ -636,11 +822,47 @@ export class DatabaseWorkflowService implements WorkflowService {
         },
         paymentMethods: {
           where: { state: { in: ["ACTIVE", "AUTHORIZING"] } },
-          select: { id: true, type: true, state: true, maskedLabel: true },
+          select: {
+            id: true,
+            type: true,
+            state: true,
+            maskedLabel: true,
+            cardAuthorizations: {
+              where: { state: { in: ["CREATED", "PENDING", "UNKNOWN"] } },
+              orderBy: { createdAt: "desc" },
+              select: { id: true },
+              take: 1,
+            },
+            directDebitMandates: {
+              where: { state: { in: ["CREATED", "PENDING", "UNKNOWN"] } },
+              orderBy: { createdAt: "desc" },
+              select: { id: true },
+              take: 1,
+            },
+          },
         },
       },
     });
-    return asData(member ?? { state: "NOT_STARTED" });
+    if (member === null) return asData({ state: "NOT_STARTED" });
+    return asData({
+      id: member.id,
+      state: member.state,
+      payoutPosition: member.payoutPosition,
+      phoneVerifiedAt: member.phoneVerifiedAt,
+      acceptedRuleVersionId: member.acceptedRuleVersionId,
+      recurringConsentAt: member.recurringConsentAt,
+      bankAccounts: member.bankAccounts,
+      paymentMethods: member.paymentMethods.map((method) => ({
+        id: method.id,
+        type: method.type,
+        state: method.state,
+        maskedLabel: method.maskedLabel,
+        authorizationId:
+          method.cardAuthorizations[0]?.id ??
+          method.directDebitMandates[0]?.id ??
+          null,
+      })),
+    });
   }
 
   async submitRegistrationDetails(
@@ -649,14 +871,7 @@ export class DatabaseWorkflowService implements WorkflowService {
     input: unknown,
   ): Promise<ApiData> {
     const value = registrationSchema.parse(input);
-    await this.collageForUser(context, collageId).catch(
-      async (error: unknown) => {
-        const collage = await this.options.client.collage.findUnique({
-          where: { id: collageId },
-        });
-        if (collage === null) throw error;
-      },
-    );
+    const collage = await this.collageForUser(context, collageId);
     const identity =
       await this.options.client.telegramIdentity.findFirstOrThrow({
         where: { userId: context.principal.userId },
@@ -682,6 +897,8 @@ export class DatabaseWorkflowService implements WorkflowService {
             `member:${collageId}:nin`,
           ),
           ninHash: keyedHash(value.nin, this.options.hashKey),
+          identityVerificationMode: "COLLECTED_UNVERIFIED",
+          identityVerifiedAt: null,
         },
         update: {
           legalNameEncrypted: encryptString(
@@ -695,6 +912,8 @@ export class DatabaseWorkflowService implements WorkflowService {
             `member:${collageId}:nin`,
           ),
           ninHash: keyedHash(value.nin, this.options.hashKey),
+          identityVerificationMode: "COLLECTED_UNVERIFIED",
+          identityVerifiedAt: null,
           state: "DETAILS_SUBMITTED",
         },
       });
@@ -705,6 +924,12 @@ export class DatabaseWorkflowService implements WorkflowService {
       });
     }
 
+    if (value.preferredChargeRule.kind !== collage.frequency) {
+      throw conflict(
+        "CHARGE_PREFERENCE_FREQUENCY_MISMATCH",
+        "The charge preference does not match this Collage frequency.",
+      );
+    }
     await reservePayoutPosition(this.options.client, {
       collageId,
       userId: context.principal.userId,
@@ -900,17 +1125,44 @@ export class DatabaseWorkflowService implements WorkflowService {
     const value = z
       .object({ ruleVersionId: uuid, recurringConsent: z.literal(true) })
       .parse(input);
-    const member = await this.member(context, collageId);
+    const member = await this.options.client.collageMember.findUnique({
+      where: {
+        collageId_userId: {
+          collageId,
+          userId: context.principal.userId,
+        },
+      },
+      include: {
+        bankAccounts: {
+          where: { isDefault: true, state: "VERIFIED" },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (member === null) throw notFound("Registration");
     const rule = await this.options.client.collageRuleVersion.findFirst({
       where: { id: value.ruleVersionId, collageId },
     });
     if (rule === null)
       throw conflict("RULE_VERSION_STALE", "The rule version is stale.");
+    if (
+      member.phoneVerifiedAt === null ||
+      member.payoutPosition === null ||
+      member.preferredChargeRule === null ||
+      member.bankAccounts.length !== 1
+    ) {
+      throw conflict(
+        "REGISTRATION_DETAILS_REQUIRED",
+        "Complete phone, payout-account, position, and schedule details first.",
+      );
+    }
     const updated = await this.options.client.collageMember.update({
       where: { id: member.id },
       data: {
         acceptedRuleVersionId: rule.id,
         recurringConsentAt: new Date(),
+        state: "PAYMENT_METHOD_REQUIRED",
       },
     });
     return asData({ acceptedRuleVersionId: updated.acceptedRuleVersionId });
@@ -924,6 +1176,151 @@ export class DatabaseWorkflowService implements WorkflowService {
         "Provider calls are disabled in this environment.",
       );
     }
+  }
+
+  private async completeRegistrationAfterAuthorization(
+    memberId: string,
+    correlationId: string,
+  ): Promise<void> {
+    const member = await this.options.client.collageMember.findUniqueOrThrow({
+      where: { id: memberId },
+      select: {
+        state: true,
+        acceptedRuleVersionId: true,
+        identityVerificationMode: true,
+        identityVerifiedAt: true,
+        legalNameEncrypted: true,
+        ninEncrypted: true,
+        ninHash: true,
+        phoneEncrypted: true,
+        phoneHash: true,
+        phoneVerifiedAt: true,
+        preferredChargeRule: true,
+        recurringConsentAt: true,
+      },
+    });
+    if (member.state !== "PAYMENT_METHOD_AUTHORIZING") return;
+    if (
+      member.acceptedRuleVersionId === null ||
+      member.identityVerificationMode === null ||
+      (member.identityVerificationMode !== "COLLECTED_UNVERIFIED" &&
+        member.identityVerifiedAt === null) ||
+      member.legalNameEncrypted === null ||
+      member.ninEncrypted === null ||
+      member.ninHash === null ||
+      member.phoneEncrypted === null ||
+      member.phoneHash === null ||
+      member.phoneVerifiedAt === null ||
+      member.preferredChargeRule === null ||
+      member.recurringConsentAt === null
+    ) {
+      throw conflict(
+        "REGISTRATION_EVIDENCE_INCOMPLETE",
+        "Payment authorization succeeded, but registration evidence is incomplete.",
+      );
+    }
+    await completeRegistration(
+      this.options.client,
+      memberId,
+      {
+        acceptedRuleVersionId: member.acceptedRuleVersionId,
+        identityVerificationMode: member.identityVerificationMode,
+        identityVerifiedAt: member.identityVerifiedAt,
+        legalNameEncrypted: member.legalNameEncrypted,
+        ninEncrypted: member.ninEncrypted,
+        ninHash: member.ninHash,
+        phoneEncrypted: member.phoneEncrypted,
+        phoneHash: member.phoneHash,
+        phoneVerifiedAt: member.phoneVerifiedAt,
+        preferredChargeRule: member.preferredChargeRule,
+        recurringConsentAt: member.recurringConsentAt,
+      },
+      correlationId,
+    );
+  }
+
+  async completeManualRegistration(
+    context: RequestContext,
+    collageId: string,
+    input: unknown,
+  ): Promise<ApiData> {
+    const value = manualRegistrationSchema.parse(input);
+    const member = await this.member(context, collageId);
+    if (member.state === "REGISTERED") {
+      return asData({
+        collageStarted: false,
+        memberId: member.id,
+        state: member.state,
+      });
+    }
+    const evidenceMember =
+      await this.options.client.collageMember.findUniqueOrThrow({
+        where: { id: member.id },
+      });
+    if (
+      evidenceMember.acceptedRuleVersionId === null ||
+      evidenceMember.identityVerificationMode === null ||
+      (evidenceMember.identityVerificationMode !== "COLLECTED_UNVERIFIED" &&
+        evidenceMember.identityVerifiedAt === null) ||
+      evidenceMember.legalNameEncrypted === null ||
+      evidenceMember.ninEncrypted === null ||
+      evidenceMember.ninHash === null ||
+      evidenceMember.phoneEncrypted === null ||
+      evidenceMember.phoneHash === null ||
+      evidenceMember.phoneVerifiedAt === null ||
+      evidenceMember.preferredChargeRule === null ||
+      evidenceMember.recurringConsentAt === null
+    ) {
+      throw conflict(
+        "REGISTRATION_EVIDENCE_INCOMPLETE",
+        "Complete identity, phone, payout account, position, schedule, and rules first.",
+      );
+    }
+    await this.options.client.collageMember.update({
+      where: { id: member.id },
+      data: {
+        manualPaymentEmailEncrypted: encryptString(
+          value.customerEmail,
+          this.options.encryption,
+          `member:${member.id}:manual-payment-email`,
+        ),
+        manualPaymentEmailHash: keyedHash(
+          value.customerEmail.toLowerCase(),
+          this.options.hashKey,
+        ),
+      },
+    });
+    const result = await completeRegistration(
+      this.options.client,
+      member.id,
+      {
+        acceptedRuleVersionId: evidenceMember.acceptedRuleVersionId,
+        identityVerificationMode: evidenceMember.identityVerificationMode,
+        identityVerifiedAt: evidenceMember.identityVerifiedAt,
+        legalNameEncrypted: evidenceMember.legalNameEncrypted,
+        ninEncrypted: evidenceMember.ninEncrypted,
+        ninHash: evidenceMember.ninHash,
+        phoneEncrypted: evidenceMember.phoneEncrypted,
+        phoneHash: evidenceMember.phoneHash,
+        phoneVerifiedAt: evidenceMember.phoneVerifiedAt,
+        preferredChargeRule: evidenceMember.preferredChargeRule,
+        recurringConsentAt: evidenceMember.recurringConsentAt,
+      },
+      context.requestId,
+      new Date(),
+      { requireActivePaymentMethod: false },
+    );
+    this.options.logger?.info(
+      {
+        collageId,
+        collageStarted: result.collageStarted,
+        memberId: member.id,
+        paymentMode: "manual-checkout",
+        requestId: context.requestId,
+      },
+      "Manual-payment registration completed",
+    );
+    return asData({ ...result, state: "REGISTERED" });
   }
 
   async getBanks(): Promise<ApiData> {
@@ -999,14 +1396,18 @@ export class DatabaseWorkflowService implements WorkflowService {
     const bankName = banks.find(({ code }) => code === value.bankCode)?.name;
     if (bankName === undefined)
       throw new ApiError(400, "BANK_UNSUPPORTED", "Bank is not supported.");
-    const bank = await withSerializableTransaction(
+    const saved = await withSerializableTransaction(
       this.options.client,
       async (transaction) => {
+        const current = await transaction.bankAccount.findFirst({
+          where: { memberId: member.id, isDefault: true, state: "VERIFIED" },
+          select: { id: true },
+        });
         await transaction.bankAccount.updateMany({
           where: { memberId: member.id, isDefault: true },
           data: { isDefault: false, state: "REPLACED", replacedAt: new Date() },
         });
-        return transaction.bankAccount.upsert({
+        const bank = await transaction.bankAccount.upsert({
           where: {
             memberId_accountNumberHash: {
               memberId: member.id,
@@ -1048,25 +1449,112 @@ export class DatabaseWorkflowService implements WorkflowService {
             verifiedAt: new Date(),
           },
         });
+        const operation = current === null ? "added" : "updated";
+        await appendAuditLog(transaction, {
+          actorType: "USER",
+          actorId: context.principal.userId,
+          action: `payout-account.${operation}`,
+          entityType: "bank-account",
+          entityId: bank.id,
+          correlationId: context.requestId,
+          source: "api",
+          safeMetadata: { collageId },
+        });
+        return { bank, operation };
       },
     );
     return asData({
-      id: bank.id,
-      bankCode: bank.bankCode,
-      bankName: bank.bankName,
-      maskedAccountNumber: bank.maskedAccountNumber,
-      state: bank.state,
+      id: saved.bank.id,
+      bankCode: saved.bank.bankCode,
+      bankName: saved.bank.bankName,
+      maskedAccountNumber: saved.bank.maskedAccountNumber,
+      operation: saved.operation,
+      state: saved.bank.state,
     });
   }
 
-  async setupCard(
+  private async assertPaymentMethodOperation(
+    memberId: string,
+    operation: "add" | "replace",
+  ): Promise<void> {
+    const [member, active, authorizing] = await Promise.all([
+      this.options.client.collageMember.findUnique({
+        where: { id: memberId },
+        include: {
+          bankAccounts: {
+            where: { isDefault: true, state: "VERIFIED" },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      }),
+      this.options.client.paymentMethod.findFirst({
+        where: { memberId, state: "ACTIVE" },
+        select: { id: true },
+      }),
+      this.options.client.paymentMethod.findFirst({
+        where: { memberId, state: "AUTHORIZING" },
+        select: { id: true },
+      }),
+    ]);
+    if (member === null) {
+      throw notFound("Registration");
+    }
+    if (
+      member.legalNameEncrypted === null ||
+      member.ninEncrypted === null ||
+      member.phoneEncrypted === null ||
+      member.phoneVerifiedAt === null ||
+      member.payoutPosition === null ||
+      member.preferredChargeRule === null ||
+      member.acceptedRuleVersionId === null ||
+      member.recurringConsentAt === null ||
+      member.bankAccounts.length !== 1
+    ) {
+      throw conflict(
+        "REGISTRATION_DETAILS_REQUIRED",
+        "Complete the required member details before adding a payment method.",
+      );
+    }
+    const error = paymentMethodOperationError({
+      active: active !== null,
+      authorizing: authorizing !== null,
+      operation,
+    });
+    if (error !== undefined) throw conflict(error.code, error.message);
+  }
+
+  setupCard(
     context: RequestContext,
     collageId: string,
     input: unknown,
   ): Promise<ApiData> {
+    return this.setupCardForOperation(context, collageId, input, "add");
+  }
+
+  private async setupCardForOperation(
+    context: RequestContext,
+    collageId: string,
+    input: unknown,
+    operation: "add" | "replace",
+  ): Promise<ApiData> {
     this.assertProviderEnabled();
     const value = cardSchema.parse(input);
     const member = await this.member(context, collageId);
+    await this.options.client.collageMember.update({
+      where: { id: member.id },
+      data: {
+        manualPaymentEmailEncrypted: encryptString(
+          value.customerEmail,
+          this.options.encryption,
+          `member:${member.id}:manual-payment-email`,
+        ),
+        manualPaymentEmailHash: keyedHash(
+          value.customerEmail.toLowerCase(),
+          this.options.hashKey,
+        ),
+      },
+    });
     const collage = await this.options.client.collage.findUniqueOrThrow({
       where: { id: collageId },
     });
@@ -1093,6 +1581,7 @@ export class DatabaseWorkflowService implements WorkflowService {
         state: existing.state,
       });
     }
+    await this.assertPaymentMethodOperation(member.id, operation);
     const paymentReference = `card_${randomUUID()}`;
     const created = await this.options.client.paymentMethod.create({
       data: {
@@ -1126,7 +1615,7 @@ export class DatabaseWorkflowService implements WorkflowService {
       paymentDescription: `Collage card setup for ${collage.name}`,
       paymentMethods: ["CARD"],
       paymentReference,
-      redirectUrl: `${this.options.publicUrl}/payment-return`,
+      redirectUrl: `${this.options.miniAppUrl.replace(/\/$/u, "")}/payment-return`,
     });
     const authorization = await this.options.client.cardAuthorization.update({
       where: { id: authorizationRecord.id },
@@ -1140,10 +1629,12 @@ export class DatabaseWorkflowService implements WorkflowService {
         state: "PENDING",
       },
     });
-    await this.options.client.collageMember.update({
-      where: { id: member.id },
-      data: { state: "PAYMENT_METHOD_AUTHORIZING" },
-    });
+    if (operation === "add" && member.state === "PAYMENT_METHOD_REQUIRED") {
+      await this.options.client.collageMember.update({
+        where: { id: member.id },
+        data: { state: "PAYMENT_METHOD_AUTHORIZING" },
+      });
+    }
     return asData({
       authorizationId: authorization.id,
       checkoutUrl: checkout.checkoutUrl,
@@ -1151,23 +1642,58 @@ export class DatabaseWorkflowService implements WorkflowService {
     });
   }
 
-  async setupMandate(
+  setupMandate(
     context: RequestContext,
     collageId: string,
     input: unknown,
   ): Promise<ApiData> {
+    return this.setupMandateForOperation(context, collageId, input, "add");
+  }
+
+  private async setupMandateForOperation(
+    context: RequestContext,
+    collageId: string,
+    input: unknown,
+    operation: "add" | "replace",
+  ): Promise<ApiData> {
     this.assertProviderEnabled();
     const value = mandateSchema.parse(input);
     const member = await this.member(context, collageId);
+    await this.options.client.collageMember.update({
+      where: { id: member.id },
+      data: {
+        manualPaymentEmailEncrypted: encryptString(
+          value.customerEmail,
+          this.options.encryption,
+          `member:${member.id}:manual-payment-email`,
+        ),
+        manualPaymentEmailHash: keyedHash(
+          value.customerEmail.toLowerCase(),
+          this.options.hashKey,
+        ),
+      },
+    });
     const collage = await this.options.client.collage.findUniqueOrThrow({
       where: { id: collageId },
     });
     const mandateReference = `mandate_${value.idempotencyKey}`;
+    this.options.logger?.info(
+      {
+        collageId,
+        memberId: member.id,
+        operation,
+        requestId: context.requestId,
+        startAt: value.startDate,
+        endAt: value.endDate,
+      },
+      "Direct-debit setup validated",
+    );
     const existing = await this.options.client.directDebitMandate.findUnique({
       where: { mandateReference },
     });
     if (existing !== null)
       return asData({ authorizationId: existing.id, state: existing.state });
+    await this.assertPaymentMethodOperation(member.id, operation);
     if (member.legalNameEncrypted === null || member.phoneEncrypted === null) {
       throw conflict(
         "REGISTRATION_DETAILS_REQUIRED",
@@ -1180,28 +1706,72 @@ export class DatabaseWorkflowService implements WorkflowService {
     const mandate = await this.options.client.directDebitMandate.create({
       data: { paymentMethodId: paymentMethod.id, mandateReference },
     });
-    const provider = await this.options.monnify.createMandate({
-      amountMinor: collage.contributionAmountMinor,
-      autoRenew: false,
-      customerAccountBankCode: value.bankCode,
-      customerAccountNumber: value.accountNumber,
-      customerAddress: value.address,
-      customerEmailAddress: value.customerEmail,
-      customerName: decryptString(
-        member.legalNameEncrypted,
-        this.options.encryption,
-        `member:${collageId}:legal-name`,
-      ),
-      customerPhoneNumber: decryptString(
-        member.phoneEncrypted,
-        this.options.encryption,
-        `member:${collageId}:phone`,
-      ),
-      startDate: value.startDate,
-      endDate: value.endDate,
-      mandateDescription: `Collage mandate for ${collage.name}`,
-      mandateReference,
-    });
+    this.options.logger?.info(
+      {
+        authorizationId: mandate.id,
+        collageId,
+        memberId: member.id,
+        requestId: context.requestId,
+      },
+      "Direct-debit mandate provider request starting",
+    );
+    let provider: MandateResult;
+    try {
+      provider = await this.options.monnify.createMandate({
+        amountMinor: collage.contributionAmountMinor,
+        autoRenew: false,
+        customerAccountBankCode: value.bankCode,
+        customerAccountNumber: value.accountNumber,
+        customerAddress: value.address,
+        customerEmailAddress: value.customerEmail,
+        customerName: decryptString(
+          member.legalNameEncrypted,
+          this.options.encryption,
+          `member:${collageId}:legal-name`,
+        ),
+        customerPhoneNumber: decryptString(
+          member.phoneEncrypted,
+          this.options.encryption,
+          `member:${collageId}:phone`,
+        ),
+        startDate: new Date(value.startDate).toISOString().slice(0, 19),
+        endDate: new Date(value.endDate).toISOString().slice(0, 19),
+        mandateDescription: `Collage mandate for ${collage.name}`,
+        mandateReference,
+      });
+    } catch (error) {
+      this.options.logger?.error(
+        {
+          authorizationId: mandate.id,
+          collageId,
+          memberId: member.id,
+          providerFailure:
+            error instanceof MonnifyError
+              ? {
+                  code: error.failure.code,
+                  kind: error.failure.kind,
+                  retryable: error.failure.retryable,
+                  status: error.failure.status,
+                }
+              : { kind: "unexpected" },
+          requestId: context.requestId,
+        },
+        "Direct-debit mandate provider request failed",
+      );
+      if (
+        error instanceof MonnifyError &&
+        !error.failure.retryable &&
+        ["invalid_request", "conflict"].includes(error.failure.kind)
+      ) {
+        await rejectDirectDebitMandate(
+          this.options.client,
+          mandate.id,
+          context.requestId,
+          "api",
+        );
+      }
+      throw error;
+    }
     const updated = await this.options.client.directDebitMandate.update({
       where: { id: mandate.id },
       data: {
@@ -1225,6 +1795,23 @@ export class DatabaseWorkflowService implements WorkflowService {
         state: provider.outcome === "activated" ? "SUCCEEDED" : "PENDING",
       },
     });
+    this.options.logger?.info(
+      {
+        authorizationId: updated.id,
+        collageId,
+        memberId: member.id,
+        providerOutcome: provider.outcome,
+        providerStatus: provider.rawStatus,
+        requestId: context.requestId,
+      },
+      "Direct-debit mandate provider request completed",
+    );
+    if (operation === "add" && member.state === "PAYMENT_METHOD_REQUIRED") {
+      await this.options.client.collageMember.update({
+        where: { id: member.id },
+        data: { state: "PAYMENT_METHOD_AUTHORIZING" },
+      });
+    }
     return asData({
       authorizationId: updated.id,
       authorizationUrl: provider.authorizationLink ?? null,
@@ -1280,6 +1867,10 @@ export class DatabaseWorkflowService implements WorkflowService {
         );
       }
       if (card.state === "SUCCEEDED") {
+        await this.completeRegistrationAfterAuthorization(
+          card.paymentMethod.memberId,
+          context.requestId,
+        );
         return this.getAuthorization(context, authorizationId);
       }
       const verification =
@@ -1302,13 +1893,21 @@ export class DatabaseWorkflowService implements WorkflowService {
       }
       if (
         verification.amountPaidMinor !== card.setupAmountMinor ||
-        verification.currency !== card.currency ||
-        verification.cardToken === undefined
+        verification.currency !== card.currency
       ) {
         throw conflict(
           "CARD_SETUP_VERIFICATION_MISMATCH",
           "The verified card setup does not match the authorization.",
         );
+      }
+      if (verification.cardToken === undefined) {
+        await rejectCardAuthorizationWithoutReusableToken(
+          this.options.client,
+          card.id,
+          context.requestId,
+          "api",
+        );
+        return this.getAuthorization(context, authorizationId);
       }
       const activation = {
         activeAt: new Date(),
@@ -1349,6 +1948,10 @@ export class DatabaseWorkflowService implements WorkflowService {
         where: { id: card.id },
         data: { state: "SUCCEEDED", reusableTokenReady: true },
       });
+      await this.completeRegistrationAfterAuthorization(
+        card.paymentMethod.memberId,
+        context.requestId,
+      );
       return this.getAuthorization(context, authorizationId);
     }
 
@@ -1362,9 +1965,27 @@ export class DatabaseWorkflowService implements WorkflowService {
     if (mandate === null) {
       throw notFound("Authorization");
     }
-    const provider = await this.options.monnify.getMandateStatus(
-      mandate.mandateReference,
-    );
+    let provider: MandateResult;
+    try {
+      provider = await this.options.monnify.getMandateStatus(
+        mandate.mandateReference,
+      );
+    } catch (error) {
+      if (
+        error instanceof MonnifyError &&
+        !error.failure.retryable &&
+        ["invalid_request", "conflict"].includes(error.failure.kind)
+      ) {
+        await rejectDirectDebitMandate(
+          this.options.client,
+          mandate.id,
+          context.requestId,
+          "api",
+        );
+        return this.getAuthorization(context, authorizationId);
+      }
+      throw error;
+    }
     if (provider.outcome === "activated") {
       const activation = {
         activeAt: new Date(),
@@ -1408,6 +2029,10 @@ export class DatabaseWorkflowService implements WorkflowService {
         where: { id: mandate.id },
         data: { state: "SUCCEEDED", activatedAt: activation.activeAt },
       });
+      await this.completeRegistrationAfterAuthorization(
+        mandate.paymentMethod.memberId,
+        context.requestId,
+      );
     } else if (
       ["authorization_expired", "expired", "cancelled", "failed"].includes(
         provider.outcome,
@@ -1458,48 +2083,154 @@ export class DatabaseWorkflowService implements WorkflowService {
         "NO_PAYABLE_CONTRIBUTION",
         "No contribution is available for manual payment.",
       );
-    const existing = await this.options.client.paymentAttempt.findUnique({
-      where: { idempotencyKey: value.idempotencyKey },
+    const activeMethod = await this.options.client.paymentMethod.findFirst({
+      where: { memberId: member.id, state: "ACTIVE" },
+      select: { customerEmailEncrypted: true },
     });
-    if (existing !== null) {
-      if (existing.contributionId !== contribution.id)
-        throw conflict(
-          "IDEMPOTENCY_CONFLICT",
-          "Idempotency key is already in use.",
-        );
+    const emailEncrypted =
+      member.manualPaymentEmailEncrypted ??
+      activeMethod?.customerEmailEncrypted;
+    if (emailEncrypted === null || emailEncrypted === undefined) {
+      throw conflict(
+        "PAYMENT_EMAIL_REQUIRED",
+        "Add a payment email before starting checkout.",
+      );
+    }
+    const customerEmail = decryptString(
+      emailEncrypted,
+      this.options.encryption,
+      member.manualPaymentEmailEncrypted !== null
+        ? `member:${member.id}:manual-payment-email`
+        : `payment-method:${member.id}:customer-email`,
+    );
+    const prepared = await withSerializableTransaction(
+      this.options.client,
+      async (transaction) => {
+        await lockContribution(transaction, contribution.id);
+        if (value.idempotencyKey !== undefined) {
+          const keyed = await transaction.paymentAttempt.findUnique({
+            where: { idempotencyKey: value.idempotencyKey },
+          });
+          if (keyed !== null) {
+            if (keyed.contributionId !== contribution.id) {
+              throw conflict(
+                "IDEMPOTENCY_CONFLICT",
+                "Idempotency key is already in use.",
+              );
+            }
+            return { attempt: keyed, created: false };
+          }
+        }
+        const unresolved = await transaction.paymentAttempt.findFirst({
+          where: {
+            contributionId: contribution.id,
+            type: "MANUAL_CHECKOUT",
+            state: { in: ["CREATED", "PENDING", "UNKNOWN"] },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        if (unresolved !== null) {
+          return { attempt: unresolved, created: false };
+        }
+        const sequence = await transaction.paymentAttempt.count({
+          where: {
+            contributionId: contribution.id,
+            type: "MANUAL_CHECKOUT",
+          },
+        });
+        const paymentReference = `manual_${randomUUID()}`;
+        return {
+          created: true,
+          attempt: await transaction.paymentAttempt.create({
+            data: {
+              contributionId: contribution.id,
+              type: "MANUAL_CHECKOUT",
+              providerEnvironment: this.options.providerEnvironment,
+              providerReference: paymentReference,
+              idempotencyKey:
+                value.idempotencyKey ??
+                `manual:${contribution.id}:${String(sequence + 1)}`,
+              amountMinor: contribution.amountMinor,
+              currency: contribution.currency,
+            },
+          }),
+        };
+      },
+    );
+    const attempt = prepared.attempt;
+    if (!prepared.created) {
+      this.options.logger?.info(
+        {
+          attemptId: attempt.id,
+          collageId,
+          contributionId: contribution.id,
+          memberId: member.id,
+          requestId: context.requestId,
+          state: attempt.state,
+        },
+        "Manual checkout resumed",
+      );
       return asData({
-        attemptId: existing.id,
+        attemptId: attempt.id,
         checkoutUrl:
-          existing.providerPayloadEncrypted === null
+          attempt.providerPayloadEncrypted === null
             ? null
             : decryptString(
-                existing.providerPayloadEncrypted,
+                attempt.providerPayloadEncrypted,
                 this.options.encryption,
-                `payment-attempt:${existing.id}:checkout-url`,
+                `payment-attempt:${attempt.id}:checkout-url`,
               ),
-        state: existing.state,
+        state: attempt.state,
       });
     }
-    const paymentReference = `manual_${randomUUID()}`;
-    const attempt = await this.options.client.paymentAttempt.create({
-      data: {
+    let checkout: CheckoutInitialization;
+    this.options.logger?.info(
+      {
+        attemptId: attempt.id,
+        collageId,
         contributionId: contribution.id,
-        type: "MANUAL_CHECKOUT",
-        providerEnvironment: this.options.providerEnvironment,
-        providerReference: paymentReference,
-        idempotencyKey: value.idempotencyKey,
-        amountMinor: contribution.amountMinor,
-        currency: contribution.currency,
+        memberId: member.id,
+        requestId: context.requestId,
       },
-    });
-    const checkout = await this.options.monnify.initializeCheckout({
-      amountMinor: contribution.amountMinor,
-      customerEmail: value.customerEmail,
-      metadata: { attemptId: attempt.id, contributionId: contribution.id },
-      paymentDescription: "Collage manual contribution",
-      paymentReference,
-      redirectUrl: `${this.options.publicUrl}/payment-return`,
-    });
+      "Manual checkout provider request starting",
+    );
+    try {
+      checkout = await this.options.monnify.initializeCheckout({
+        amountMinor: contribution.amountMinor,
+        customerEmail,
+        metadata: { attemptId: attempt.id, contributionId: contribution.id },
+        paymentDescription: "Collage manual contribution",
+        paymentReference: attempt.providerReference,
+        redirectUrl: `${this.options.miniAppUrl.replace(/\/$/u, "")}/payment-return`,
+      });
+    } catch (error) {
+      this.options.logger?.error(
+        {
+          attemptId: attempt.id,
+          collageId,
+          contributionId: contribution.id,
+          memberId: member.id,
+          providerFailure:
+            error instanceof MonnifyError
+              ? {
+                  code: error.failure.code,
+                  kind: error.failure.kind,
+                  retryable: error.failure.retryable,
+                  status: error.failure.status,
+                }
+              : { kind: "unexpected" },
+          requestId: context.requestId,
+        },
+        "Manual checkout provider request failed",
+      );
+      if (error instanceof MonnifyError && !error.failure.retryable) {
+        await this.options.client.paymentAttempt.update({
+          where: { id: attempt.id },
+          data: { state: "FAILED_TERMINAL", resolvedAt: new Date() },
+        });
+      }
+      throw error;
+    }
     await this.options.client.paymentAttempt.update({
       where: { id: attempt.id },
       data: {
@@ -1513,6 +2244,17 @@ export class DatabaseWorkflowService implements WorkflowService {
         ),
       },
     });
+    this.options.logger?.info(
+      {
+        attemptId: attempt.id,
+        collageId,
+        contributionId: contribution.id,
+        memberId: member.id,
+        requestId: context.requestId,
+        state: "PENDING",
+      },
+      "Manual checkout provider request completed",
+    );
     return asData({
       attemptId: attempt.id,
       checkoutUrl: checkout.checkoutUrl,
@@ -1591,8 +2333,8 @@ export class DatabaseWorkflowService implements WorkflowService {
     input: unknown,
   ): Promise<ApiData> {
     return kind === "card"
-      ? this.setupCard(context, collageId, input)
-      : this.setupMandate(context, collageId, input);
+      ? this.setupCardForOperation(context, collageId, input, "replace")
+      : this.setupMandateForOperation(context, collageId, input, "replace");
   }
 
   async getPayout(
@@ -1734,7 +2476,8 @@ export class DatabaseWorkflowService implements WorkflowService {
       if (collage === undefined) {
         const token = await this.options.launchTokens.issue(
           { action: "CREATE_COLLAGE", chatId: chat.id },
-          new Date(Date.now() + 5 * 60_000),
+          new Date(Date.now() + PERSISTENT_LAUNCH_TOKEN_TTL_MS),
+          false,
         );
         return asData({
           state: "EMPTY",
@@ -1752,11 +2495,19 @@ export class DatabaseWorkflowService implements WorkflowService {
       }
       const token = await this.options.launchTokens.issue(
         {
-          action: value.variant === "rules" ? "VIEW_RULES" : "VIEW_COLLAGE",
+          action:
+            value.variant === "rules"
+              ? "VIEW_RULES"
+              : collage.state === "REGISTRATION_OPEN"
+                ? "JOIN_COLLAGE"
+                : ["ACTIVE", "BLOCKED"].includes(collage.state)
+                  ? "PAY_CONTRIBUTION"
+                  : "VIEW_COLLAGE",
           chatId: chat.id,
           collageId: collage.id,
         },
-        new Date(Date.now() + 5 * 60_000),
+        new Date(Date.now() + PERSISTENT_LAUNCH_TOKEN_TTL_MS),
+        false,
       );
       const cycle = collage.cycles[0];
       const payoutProcessing =
@@ -1767,7 +2518,7 @@ export class DatabaseWorkflowService implements WorkflowService {
             cycle.payout.state,
           ));
       const state = payoutProcessing ? "PAYOUT_PROCESSING" : collage.state;
-      const statusText = `<b>${escapeTelegramHtml(collage.name)}</b>\nState: ${state}\nMembers: ${String(collage._count.members)}/${String(collage.participantLimit)}\nContribution: ${escapeTelegramHtml(collage.currency)} ${collage.contributionAmountMinor.toString()} minor units`;
+      const statusText = `<b>${escapeTelegramHtml(collage.name)}</b>\nState: ${state}\nMembers: ${String(collage._count.members)}/${String(collage.participantLimit)}\nContribution: ${escapeTelegramHtml(collage.currency)} ${collage.contributionAmountMinor.toString()} minor units${state === "ACTIVE" ? "\n\nThe Collage has started. Cycle contributions are now due—tap Pay now to open your own verified checkout." : ""}`;
       const rulesText = `<b>${escapeTelegramHtml(collage.name)} rules</b>\nContribution: ${escapeTelegramHtml(collage.currency)} ${collage.contributionAmountMinor.toString()} minor units\nFrequency: ${collage.frequency.toLowerCase()}\nParticipants: ${String(collage.participantLimit)}\nOpen Collage to review and consent to the complete immutable rules.`;
       return asData({
         state,
@@ -1775,7 +2526,14 @@ export class DatabaseWorkflowService implements WorkflowService {
         parseMode: "HTML",
         buttons: [
           {
-            label: value.variant === "rules" ? "Review rules" : "Open Collage",
+            label:
+              value.variant === "rules"
+                ? "Review rules"
+                : collage.state === "REGISTRATION_OPEN"
+                  ? "Opt in"
+                  : ["ACTIVE", "BLOCKED"].includes(collage.state)
+                    ? "Pay now"
+                    : "Open Collage",
             startAppToken: token,
           },
         ],
@@ -1811,9 +2569,13 @@ export class DatabaseWorkflowService implements WorkflowService {
             : { collageId: value.collageId }),
           ...(value.userId === undefined ? {} : { userId: value.userId }),
         },
-        new Date(Date.now() + 5 * 60_000),
+        new Date(Date.now() + PERSISTENT_LAUNCH_TOKEN_TTL_MS),
+        false,
       );
-      return asData({ token, expiresInSeconds: 300 });
+      return asData({
+        token,
+        expiresInSeconds: PERSISTENT_LAUNCH_TOKEN_TTL_MS / 1_000,
+      });
     }
     if (operation === "events.bot-membership-changed") {
       const value = z

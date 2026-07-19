@@ -97,8 +97,10 @@ export type ReconciliationJob = z.infer<typeof reconciliationJobSchema>;
 export type ReminderJob = z.infer<typeof reminderJobSchema>;
 
 export const telegramNotificationTypeSchema = z.enum([
+  "collage.created",
   "registration.completed",
   "collage.started",
+  "contribution.paid",
   "contribution.payment_failed",
   "contribution.reminder",
   "member.left",
@@ -117,6 +119,7 @@ export const telegramNotificationJobSchema = z.object({
     "edit-pinned-status",
     "pin-status-message",
     "send-private-message",
+    "refresh-status-card",
   ]),
   telegramChatId: z.string().regex(/^-?\d+$/u),
   telegramMessageId: z.string().regex(/^\d+$/u).optional(),
@@ -131,6 +134,14 @@ export const telegramNotificationJobSchema = z.object({
     )
     .max(8)
     .default([]),
+  actionButton: z
+    .object({
+      action: z.literal("PAY_CONTRIBUTION"),
+      chatId: z.uuid(),
+      collageId: z.uuid(),
+      label: z.string().min(1).max(64),
+    })
+    .optional(),
 });
 
 export type TelegramNotificationJob = z.infer<

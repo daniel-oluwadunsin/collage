@@ -73,6 +73,7 @@ export interface CheckoutInitialization {
 export interface TransactionVerification {
   readonly amountPaidMinor: bigint;
   readonly cardToken?: string;
+  readonly supportsTokenization?: boolean;
   readonly currency: string;
   readonly outcome: PaymentOutcome;
   readonly paymentMethod?: string;

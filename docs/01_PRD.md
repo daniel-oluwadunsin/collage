@@ -171,6 +171,11 @@ The bot should maintain one live pinned status message and edit it as state chan
 
 Creation occurs inside the Mini App and is restricted to a current Telegram group administrator.
 
+Creating a Collage does not automatically register the creator with incomplete
+financial details. Immediately after registration opens, the creator is offered
+the same complete, resumable opt-in flow as every other member and may occupy
+one of the configured participant slots.
+
 ### 7.1 Required fields
 
 - Collage name.
@@ -180,7 +185,8 @@ Creation occurs inside the Mini App and is restricted to a current Telegram grou
 - Registration limit / participant count.
 - Contribution frequency: daily, weekly, monthly, or yearly.
 - Frequency interval: every `N` days, weeks, months, or years.
-- First cycle start date.
+- Automatic first-cycle start immediately after every participant slot has
+  completed registration and payment authorization.
 - Cycle payment deadline or deadline offset.
 - Grace period.
 - Reminder frequency, interval, time, and timezone.
@@ -197,7 +203,6 @@ Reject:
 
 - fewer than two participants;
 - non-positive amounts;
-- start dates in the past;
 - cycle deadlines before cycle start;
 - reminder cadence outside supported limits;
 - impossible schedule definitions;
@@ -300,9 +305,23 @@ When a user taps Join Collage again, the backend decides the route:
 - no registration: show Stage A;
 - details submitted: show payment-method requirement;
 - card/mandate authorization pending: show Continue Authorization and Choose Another Method;
+- recurring payment skipped: complete registration and explain that each cycle
+  requires a verified hosted-checkout payment;
 - fully registered: show summary and management actions;
 - Collage full/registration closed: show unavailable state;
 - already registered: never create another membership.
+
+Financial-detail actions are driven by current server state:
+
+- no verified payout account: show **Add payout account**;
+- verified payout account exists: show **Update payout account**;
+- no active payment method: show **Add payment method**;
+- authorization is pending: show **Continue payment setup**;
+- active payment method exists: show **Replace payment method**.
+
+The backend rejects an add request when an active method exists, rejects a
+replacement when none exists, and permits at most one authorizing method per
+member.
 
 Every screen repeats Collage name, group, amount/frequency, and relevant cycle or position.
 
@@ -329,7 +348,8 @@ Registration remains `PAYMENT_METHOD_AUTHORIZING` while the mandate is pending a
 
 ### 8.7 Registration completion notification
 
-When payment authorization becomes active, the backend emits a notification exactly once:
+When payment authorization becomes active, or a member explicitly completes
+manual-payment registration, the backend emits a notification exactly once:
 
 > ✅ **@Member has joined [Collage name]**
 >
@@ -357,7 +377,8 @@ When the fully registered count reaches the registration limit:
 1. acquire a Collage-level database lock;
 2. verify every position is filled exactly once;
 3. verify every member accepted the current rule version;
-4. verify every member has an active payment method;
+4. verify every member either has an active recurring payment method or has
+   explicitly selected manual hosted-checkout payments;
 5. freeze rules and order;
 6. create all cycle records;
 7. assign each cycle recipient by payout position;
@@ -367,7 +388,9 @@ When the fully registered count reaches the registration limit:
 11. update the pinned message;
 12. post a start notification.
 
-This transition must happen exactly once even under concurrent webhooks.
+This transition must happen exactly once even when the last slot is completed
+concurrently by provider webhooks and manual registrations. The resulting
+group message includes a Pay now button.
 
 ## 10. Collection flow
 
@@ -385,6 +408,18 @@ At the member's calculated preferred charge time:
 8. store the attempt and normalized status;
 9. verify asynchronously through webhook and/or status query;
 10. notify the group only after a final failure is confirmed.
+
+If a registered member has no active card token or direct-debit mandate, the
+worker does not create a fake provider attempt. It marks that contribution as
+manual-payment-required. One group reminder is built from current database
+state, safely mentions all members who owe and have no unresolved provider
+operation, and includes one **Pay now** button.
+
+The button opens the Mini App for the current Collage. For an authorized owing
+member, the Mini App requests a server-created Monnify hosted checkout and
+redirects to the returned checkout URL. Redirect return is pending-only;
+payment is credited exclusively after a verified provider webhook or
+server-side status reconciliation matches reference, amount, and currency.
 
 ### 10.2 Verified success
 

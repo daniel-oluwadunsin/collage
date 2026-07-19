@@ -7,6 +7,7 @@ import {
   createQueue,
   createRedisConnection,
   createWorker,
+  deterministicJobId,
   lifecycleJobSchema,
   maintenanceJobSchema,
   outboxJobSchema,
@@ -91,12 +92,13 @@ export const createWorkerRuntime = async (
         ),
       },
     },
+    hashKey: Buffer.from(environment.APP_HASH_PEPPER, "utf8"),
     maximumChargeAttempts: environment.WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS,
     pendingPollMs: environment.WORKER_PENDING_POLL_SECONDS * 1_000,
     provider,
     providerEnabled: environment.PROVIDER_CALLS_ENABLED,
     providerEnvironment: environment.MONNIFY_ENV,
-    providerRedirectUrl: `${environment.API_PUBLIC_URL.replace(/\/$/u, "")}/payment-return`,
+    providerRedirectUrl: `${environment.MINI_APP_PUBLIC_URL.replace(/\/$/u, "")}/payment-return`,
     scheduler,
     staleOperationMs: environment.WORKER_STALE_OPERATION_MINUTES * 60_000,
   });
@@ -115,13 +117,27 @@ export const createWorkerRuntime = async (
       async (job) => {
         const correlationId = `worker:${queue}:${job.id ?? randomUUID()}`;
         metrics.started(queue);
+        logger.info(
+          { correlationId, jobId: job.id, jobName: job.name, queue },
+          "Worker job started",
+        );
         try {
           await processor(job.data, correlationId);
           metrics.finished(queue, true);
+          logger.info(
+            { correlationId, jobId: job.id, jobName: job.name, queue },
+            "Worker job completed",
+          );
         } catch (error) {
           metrics.finished(queue, false);
           logger.error(
-            { error, jobId: job.id, jobName: job.name, queue },
+            {
+              correlationId,
+              error,
+              jobId: job.id,
+              jobName: job.name,
+              queue,
+            },
             "Worker job failed",
           );
           throw error;
@@ -253,6 +269,19 @@ export const createWorkerRuntime = async (
       opts: { attempts: 3 },
     },
   );
+  const startingCollages = await client.collage.findMany({
+    where: { state: "STARTING" },
+    select: { id: true },
+    take: 500,
+  });
+  for (const collage of startingCollages) {
+    await scheduler.enqueue({
+      queue: "collage-lifecycle",
+      name: "recover-start-collage",
+      id: deterministicJobId("recover-start-collage-v2", collage.id),
+      data: { operation: "start-collage", collageId: collage.id },
+    });
+  }
   await maintenanceQueue.upsertJobScheduler(
     "ledger-reconciliation",
     { every: 5 * 60_000 },

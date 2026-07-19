@@ -104,12 +104,26 @@ function BootRouter({ online }: { readonly online: boolean }): JSX.Element {
             Retry authentication
           </Button>
         }
-        description="Collage could not verify Telegram init data. Close this view and reopen it from the current bot message if retry does not work."
+        description={`Collage could not verify Telegram init data. Close this view and reopen it from the current bot message if retry does not work.${bootstrap.error.requestId === undefined ? "" : ` Reference: ${bootstrap.error.requestId}.`}`}
         title="Telegram authentication failed"
         variant="error"
       />
     );
   }
+  if (bootstrap.isError)
+    return (
+      <StatePage
+        action={
+          <Button onClick={() => void bootstrap.refetch()} type="button">
+            <RefreshCw aria-hidden="true" size={18} />
+            Retry connection
+          </Button>
+        }
+        description="Collage could not reach its API. Check the Mini App/API tunnel and try again. The development terminal will show server-side bootstrap failures."
+        title="Connection failed"
+        variant="error"
+      />
+    );
   if (bootstrap.data === undefined) return <FullPageSkeleton />;
   const launch = bootstrap.data.launch;
   if (launch === null)
@@ -177,11 +191,11 @@ function CollageRoute({
     queryKey: ["registration", collageId],
     queryFn: () =>
       api.request(`/collages/${collageId}/me/registration`, registrationSchema),
-    enabled: action === "JOIN_COLLAGE",
+    enabled: true,
   });
   if (collage.isLoading || status.isLoading || registration.isLoading)
     return <FullPageSkeleton />;
-  if (collage.isError || status.isError)
+  if (collage.isError || status.isError || registration.isError)
     return (
       <StatePage
         action={
@@ -189,13 +203,14 @@ function CollageRoute({
             onClick={() => {
               void collage.refetch();
               void status.refetch();
+              void registration.refetch();
             }}
             type="button"
           >
             Retry current state
           </Button>
         }
-        description="No financial action was attempted. Previously displayed provider results should not be assumed current."
+        description={`No financial action was attempted. ${collage.isError ? "Collage details failed to load. " : ""}${status.isError ? "Current cycle status failed to load. " : ""}${registration.isError ? "Your registration state failed to load. " : ""}Previously displayed provider results should not be assumed current.`}
         title="Collage state is unavailable"
         variant={online ? "error" : "offline"}
       />
@@ -271,5 +286,12 @@ function CollageRoute({
       );
     return <PayoutRecovery collage={collage.data} payoutId={payoutId} />;
   }
-  return <CollageDashboard action={action} status={status.data} />;
+  if (registration.data === undefined) return <FullPageSkeleton />;
+  return (
+    <CollageDashboard
+      action={action}
+      registration={registration.data}
+      status={status.data}
+    />
+  );
 }

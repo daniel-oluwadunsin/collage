@@ -11,6 +11,12 @@ import { z } from "zod";
 
 import type { JobScheduler, ScheduledJob } from "./ports.js";
 
+const escapeTelegramHtml = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
 const routeEvent = (event: {
   readonly aggregateId: string;
   readonly eventType: string;
@@ -25,7 +31,7 @@ const routeEvent = (event: {
       return {
         queue: "collage-lifecycle",
         name: "start-collage",
-        id: deterministicJobId("start-collage", collageId),
+        id: deterministicJobId("start-collage", collageId, event.id),
         data: { operation: "start-collage", collageId },
       };
     }
@@ -45,6 +51,20 @@ const routeEvent = (event: {
         name: "evaluate-cycle",
         id: deterministicJobId("evaluate-cycle", cycleId, event.id),
         data: { operation: "deadline", cycleId },
+      };
+    }
+    case "contribution.manual-payment-required": {
+      const { cycleId } = z.object({ cycleId: z.uuid() }).parse(event.payload);
+      const scheduledFor = new Date(Date.now() + 2_000);
+      return {
+        queue: "reminders",
+        name: "manual-payment-reminder",
+        id: deterministicJobId("manual-reminder", cycleId),
+        data: {
+          cycleId,
+          scheduledFor: scheduledFor.toISOString(),
+        },
+        delayMs: 2_000,
       };
     }
     case "payment.status-check.requested": {
@@ -125,8 +145,10 @@ const notificationForEvent = async (
       string,
       {
         readonly type:
+          | "collage.created"
           | "registration.completed"
           | "collage.started"
+          | "contribution.paid"
           | "contribution.payment_failed"
           | "member.left"
           | "cycle.blocked"
@@ -138,6 +160,10 @@ const notificationForEvent = async (
       }
     >
   > = {
+    "collage.created": {
+      type: "collage.created",
+      text: "Collage created.",
+    },
     "registration.completed": {
       type: "registration.completed",
       text: "Registration completed.",
@@ -146,9 +172,9 @@ const notificationForEvent = async (
       type: "collage.started",
       text: "The Collage has started. Cycle 1 is now collecting.",
     },
-    "contribution.manual-payment-required": {
-      type: "contribution.payment_failed",
-      text: "Automatic collection could not be completed. Manual payment is now required.",
+    "contribution.paid": {
+      type: "contribution.paid",
+      text: "A member's contribution was confirmed.",
     },
     "member.left": {
       type: "member.left",
@@ -178,15 +204,51 @@ const notificationForEvent = async (
   const definition = definitions[event.eventType];
   if (definition === undefined) return undefined;
   let telegramChatId: string | undefined;
-  let operation: "send-group-message" | "send-private-message" =
-    "send-group-message";
-  if (event.eventType === "contribution.manual-payment-required") {
+  let text = definition.text;
+  const operation = "send-group-message" as const;
+  if (event.eventType === "contribution.paid") {
     const contribution = await client.cycleContribution.findUnique({
       where: { id: event.aggregateId },
-      select: { member: { select: { telegramUserId: true } } },
+      select: {
+        amountMinor: true,
+        currency: true,
+        paymentAttempts: {
+          where: { state: "SUCCEEDED", type: "MANUAL_CHECKOUT" },
+          select: { id: true },
+          take: 1,
+        },
+        member: {
+          select: {
+            telegramUserId: true,
+            user: {
+              select: {
+                telegramIdentities: {
+                  where: { isBot: false },
+                  select: { firstName: true, username: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+        cycle: {
+          select: {
+            number: true,
+            collage: {
+              select: {
+                name: true,
+                chat: { select: { telegramChatId: true } },
+              },
+            },
+          },
+        },
+      },
     });
-    telegramChatId = contribution?.member.telegramUserId;
-    operation = "send-private-message";
+    if (contribution?.paymentAttempts.length !== 1) return undefined;
+    telegramChatId = contribution.cycle.collage.chat.telegramChatId;
+    const identity = contribution.member.user.telegramIdentities[0];
+    const name = identity?.firstName ?? identity?.username ?? "Member";
+    text = `<a href="tg://user?id=${contribution.member.telegramUserId}">${escapeTelegramHtml(name)}</a> has paid ${contribution.currency} ${contribution.amountMinor.toString()} minor units for <b>${escapeTelegramHtml(contribution.cycle.collage.name)}</b>, Cycle ${String(contribution.cycle.number)}. Payment was verified by Collage.`;
   } else if (event.eventType.startsWith("payout.")) {
     const payout = await client.payout.findUnique({
       where: { id: event.aggregateId },
@@ -211,16 +273,40 @@ const notificationForEvent = async (
       },
     });
     telegramChatId = cycle?.collage.chat.telegramChatId;
-  } else if (event.eventType === "member.left") {
+  } else if (
+    event.eventType === "member.left" ||
+    event.eventType === "registration.completed"
+  ) {
     const member = await client.collageMember.findUnique({
       where: { id: event.aggregateId },
       select: {
+        payoutPosition: true,
+        telegramUserId: true,
+        user: {
+          select: {
+            telegramIdentities: {
+              where: { isBot: false },
+              select: { firstName: true, username: true },
+              take: 1,
+            },
+          },
+        },
         collage: {
-          select: { chat: { select: { telegramChatId: true } } },
+          select: {
+            name: true,
+            participantLimit: true,
+            chat: { select: { telegramChatId: true } },
+            _count: { select: { members: { where: { state: "REGISTERED" } } } },
+          },
         },
       },
     });
     telegramChatId = member?.collage.chat.telegramChatId;
+    if (event.eventType === "registration.completed" && member !== null) {
+      const identity = member.user.telegramIdentities[0];
+      const name = identity?.firstName ?? identity?.username ?? "Member";
+      text = `✅ <a href="tg://user?id=${member.telegramUserId}">${escapeTelegramHtml(name)}</a> joined <b>${escapeTelegramHtml(member.collage.name)}</b>.\nPosition: <b>${String(member.payoutPosition)}</b>\nRegistered contributors: <b>${String(member.collage._count.members)} of ${String(member.collage.participantLimit)}</b>`;
+    }
   } else {
     const collage = await client.collage.findUnique({
       where: { id: event.aggregateId },
@@ -236,9 +322,13 @@ const notificationForEvent = async (
     data: {
       deliveryId: event.id,
       type: definition.type,
-      operation,
+      operation:
+        event.eventType === "collage.created" ||
+        event.eventType === "collage.started"
+          ? "refresh-status-card"
+          : operation,
       telegramChatId,
-      text: definition.text,
+      text,
       parseMode: "HTML",
       buttons: [],
     },

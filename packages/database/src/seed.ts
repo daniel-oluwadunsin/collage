@@ -1,4 +1,4 @@
-import { createPrismaClient } from "../src/client.js";
+import { createPrismaClient } from "./client.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl === undefined) {

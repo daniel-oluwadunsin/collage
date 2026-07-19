@@ -92,6 +92,10 @@ PUT  /v1/collages/:collageId/me/payout-account
 
 After creation, return masked account data only.
 
+The payout-account `PUT` is an idempotent state-aware add/update operation. Its
+safe response identifies whether the verified default was added or updated;
+full account data is never returned.
+
 ## 6. Payment methods
 
 ```text
@@ -104,6 +108,10 @@ POST /v1/collages/:collageId/me/payment-methods/replace/direct-debit
 ```
 
 Setup responses contain only safe authorization URL/status information. They never contain reusable credentials.
+
+`setup` is valid only when the member has no active method. `replace` is valid
+only when an active method exists, and the existing method remains active until
+the replacement is verified. Both reject a second pending authorization.
 
 ## 7. Contribution payments
 

@@ -103,12 +103,6 @@ export const classifyProviderError = (
   if (status === 429) {
     return { code, kind: "rate_limited", message, retryable: true, status };
   }
-  if (
-    status !== undefined &&
-    (status >= 500 || code === "99" || /timeout|malfunction/iu.test(message))
-  ) {
-    return { code, kind: "retryable", message, retryable: true, status };
-  }
   if (status !== undefined && status >= 400 && status < 500) {
     return {
       code,
@@ -117,6 +111,12 @@ export const classifyProviderError = (
       retryable: false,
       status,
     };
+  }
+  if (
+    status !== undefined &&
+    (status >= 500 || code === "99" || /timeout|malfunction/iu.test(message))
+  ) {
+    return { code, kind: "retryable", message, retryable: true, status };
   }
   return {
     code,

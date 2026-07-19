@@ -24,22 +24,27 @@ const telegramPathPart = /^[A-Za-z0-9_]{1,64}$/u;
 
 export const buildTelegramMiniAppLink = (input: {
   readonly botUsername: string;
-  readonly shortName: string;
+  readonly shortName?: string;
   readonly startAppToken: string;
   readonly mode?: "compact" | "fullscreen";
 }): string => {
   const botUsername = input.botUsername.replace(/^@/u, "");
+  if (!telegramPathPart.test(botUsername)) {
+    throw new Error("Telegram bot username is invalid");
+  }
   if (
-    !telegramPathPart.test(botUsername) ||
+    input.shortName !== undefined &&
     !telegramPathPart.test(input.shortName)
   ) {
-    throw new Error(
-      "Telegram bot username and Mini App short name are invalid",
-    );
+    throw new Error("Telegram Mini App short name is invalid");
   }
   const query = new URLSearchParams({
     startapp: input.startAppToken,
     mode: input.mode ?? "compact",
   });
-  return `https://t.me/${botUsername}/${input.shortName}?${query.toString()}`;
+  const appPath =
+    input.shortName === undefined
+      ? botUsername
+      : `${botUsername}/${input.shortName}`;
+  return `https://t.me/${appPath}?${query.toString()}`;
 };

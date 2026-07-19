@@ -9,16 +9,16 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { json } from "../lib/api";
-import { collageSchema } from "../lib/schemas";
+import { collageSchema, statusSchema, type Collage } from "../lib/schemas";
 import { useApi } from "./providers";
 import { useTelegram } from "./providers";
+import { RegistrationFlow } from "./registration-flow";
 import {
   AsyncButton,
   Field,
   Input,
   PageTransition,
   Select,
-  StatePage,
   StepIndicator,
 } from "./ui";
 
@@ -32,17 +32,10 @@ const schema = z.object({
   participantLimit: z.number().int().min(2).max(100),
   frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
   frequencyInterval: z.number().int().min(1).max(365),
-  firstCycleStartAt: z.string().min(1),
   deadlineHours: z.number().int().min(1),
   graceHours: z.number().int().min(0),
   timezone: z.string().min(1),
   payoutTiming: z.enum(["IMMEDIATE_WHEN_READY", "SCHEDULED_WHEN_READY"]),
-  cardSetupPolicy: z.enum([
-    "COMMITMENT_DEPOSIT",
-    "FIRST_CONTRIBUTION",
-    "SANDBOX_SIMULATION",
-  ]),
-  cardSetupAmount: z.string().regex(/^\d+(?:\.\d{1,2})?$/u),
   strictCycle: z.literal(true, {
     error: "Strict cycle acknowledgement is required.",
   }),
@@ -62,7 +55,7 @@ export function CreateCollageFlow({
   const { api } = useApi();
   const telegram = useTelegram();
   const [step, setStep] = useState(0);
-  const [createdName, setCreatedName] = useState<string>();
+  const [createdCollage, setCreatedCollage] = useState<Collage>();
   const form = useForm<FormValue>({
     resolver: zodResolver(schema),
     mode: "onBlur",
@@ -74,13 +67,10 @@ export function CreateCollageFlow({
       participantLimit: 3,
       frequency: "WEEKLY",
       frequencyInterval: 1,
-      firstCycleStartAt: "",
       deadlineHours: 72,
       graceHours: 24,
       timezone: "Africa/Lagos",
       payoutTiming: "IMMEDIATE_WHEN_READY",
-      cardSetupPolicy: "COMMITMENT_DEPOSIT",
-      cardSetupAmount: "100",
       strictCycle: true,
     },
   });
@@ -98,13 +88,10 @@ export function CreateCollageFlow({
           participantLimit: value.participantLimit,
           frequency: value.frequency,
           frequencyInterval: value.frequencyInterval,
-          firstCycleStartAt: new Date(value.firstCycleStartAt).toISOString(),
           cycleDeadlineOffsetMinutes: value.deadlineHours * 60,
           gracePeriodMinutes: value.graceHours * 60,
           timezone: value.timezone,
           payoutTiming: value.payoutTiming,
-          cardSetupPolicy: value.cardSetupPolicy,
-          cardSetupAmountMinor: toMinor(value.cardSetupAmount),
           rules: {
             strictCycle: true,
             leavingDoesNotCancelObligations: true,
@@ -112,22 +99,21 @@ export function CreateCollageFlow({
           },
         }),
       );
-      await api.request(
+      const opened = await api.request(
         `/collages/${created.id}/open-registration`,
-        z.unknown(),
+        statusSchema,
         { method: "POST" },
       );
-      return created;
+      return opened.collage;
     },
-    onSuccess: (created) => setCreatedName(created.name),
+    onSuccess: setCreatedCollage,
   });
 
-  if (createdName !== undefined)
+  if (createdCollage !== undefined)
     return (
-      <StatePage
-        description={`${createdName} is open for registration. The bot can now update the group’s pinned Collage status.`}
-        title="Registration is open"
-        variant="success"
+      <RegistrationFlow
+        collage={createdCollage}
+        initialRegistration={{ state: "NOT_STARTED" }}
       />
     );
 
@@ -211,12 +197,13 @@ export function CreateCollageFlow({
                   />
                 </Field>
               </div>
-              <Field label="First cycle starts">
-                <Input
-                  type="datetime-local"
-                  {...form.register("firstCycleStartAt")}
-                />
-              </Field>
+              <div className="operational-note">
+                <strong>Automatic start</strong>
+                <span>
+                  The first cycle starts as soon as all participant slots have
+                  completed registration and payment authorization.
+                </span>
+              </div>
               <div className="form-grid">
                 <Field label="Payment deadline (hours)">
                   <Input
@@ -251,23 +238,13 @@ export function CreateCollageFlow({
                   </option>
                 </Select>
               </Field>
-              <Field label="Card setup policy">
-                <Select {...form.register("cardSetupPolicy")}>
-                  <option value="COMMITMENT_DEPOSIT">Commitment deposit</option>
-                  <option value="FIRST_CONTRIBUTION">
-                    First contribution in advance
-                  </option>
-                  <option value="SANDBOX_SIMULATION">
-                    Sandbox simulation only
-                  </option>
-                </Select>
-              </Field>
-              <Field label="Card setup amount (NGN)">
-                <Input
-                  inputMode="decimal"
-                  {...form.register("cardSetupAmount")}
-                />
-              </Field>
+              <div className="operational-note">
+                <strong>Card setup charge: ₦50</strong>
+                <span>
+                  Collage sets this amount. Members cannot change it, and it is
+                  verified by the server before card activation.
+                </span>
+              </div>
               <label className="consent">
                 <input type="checkbox" {...form.register("strictCycle")} />
                 <span>
@@ -300,6 +277,8 @@ export function CreateCollageFlow({
                   term="Members / cycles"
                   value={String(form.getValues("participantLimit"))}
                 />
+                <Summary term="Starts" value="When every slot has opted in" />
+                <Summary term="Card setup" value="₦50 fixed by Collage" />
                 <Summary
                   term="Payout"
                   value="Only after all paid and ledger reconciles"
@@ -342,8 +321,8 @@ export function CreateCollageFlow({
                         "participantLimit",
                       ] as const)
                     : step === 1
-                      ? (["firstCycleStartAt", "frequencyInterval"] as const)
-                      : (["strictCycle", "cardSetupAmount"] as const);
+                      ? (["frequencyInterval"] as const)
+                      : (["strictCycle"] as const);
                 if (await form.trigger(fields)) setStep(step + 1);
               }}
               type="button"

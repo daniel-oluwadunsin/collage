@@ -103,7 +103,7 @@ export const openApiDocument = {
         security: [{ bearerAuth: [] }],
       },
       put: {
-        summary: "Verify and replace payout account",
+        summary: "Verify and add or update payout account",
         security: [{ bearerAuth: [] }],
       },
     },
@@ -115,13 +115,13 @@ export const openApiDocument = {
     },
     "/v1/collages/{collageId}/me/payment-methods/card/setup": {
       post: {
-        summary: "Initialize card setup",
+        summary: "Add first card payment method",
         security: [{ bearerAuth: [] }],
       },
     },
     "/v1/collages/{collageId}/me/payment-methods/direct-debit/setup": {
       post: {
-        summary: "Create direct-debit mandate",
+        summary: "Add first direct-debit mandate",
         security: [{ bearerAuth: [] }],
       },
     },

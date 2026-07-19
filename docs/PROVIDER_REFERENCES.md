@@ -2,6 +2,77 @@
 
 Consulted on: 2026-07-18
 
+Re-consulted on 2026-07-19 after Monnify rejected a date-only direct-debit
+mandate start value:
+
+- [Monnify — Direct Debits, Create Mandate](https://developers.monnify.com/docs/collections/recurring-payments/direct-debit#create-mandate) —
+  the official request uses `startDate` and `endDate` with full
+  `YYYY-MM-DDTHH:MM:SS` timestamps. The start must be in the future. Collage
+  retains those documented field names, sends full timestamps, and rejects
+  same-day/past or reversed ranges before contacting Monnify.
+- The observed sandbox error text said `mandateStartDate is required`, but no
+  consulted official request schema uses that JSON key. Collage therefore does
+  not invent an undocumented alias; the date-only value and already-current
+  start date were corrected according to the published schema.
+
+Re-consulted on 2026-07-19 after observing a successful sandbox verification
+with `cardDetails.cardToken: null`:
+
+- [Monnify — Card Tokenization](https://developers.monnify.com/docs/collections/recurring-payments/card-tokenization) —
+  Monnify explicitly states that sandbox does not return a real `cardToken`;
+  sandbox exposes tokenization capability through `supportsTokenization`.
+  Production returns a reusable token only when tokenization is enabled on the
+  merchant integration. The adapter now accepts the documented nullable
+  sandbox field without fabricating a credential.
+- [Monnify — Verify Transactions](https://developers.monnify.com/docs/collections/manage-payments/verify-transactions) —
+  Collage continues to require authoritative server-side status, exact amount,
+  currency, and payment method evidence. A successful setup payment without a
+  reusable credential is not enough to activate recurring card collection.
+
+Re-consulted on 2026-07-19 while correcting persistent group actions,
+post-creation status delivery, and card-setup return/reconciliation:
+
+- [Telegram Bot API — `InlineKeyboardButton` and `WebAppInfo`](https://core.telegram.org/bots/api#inlinekeyboardbutton) —
+  inline message buttons may open HTTPS Mini Apps; Collage continues using
+  official `t.me` Main Mini App links for group cards.
+- [Telegram Mini Apps — Main Mini App links](https://core.telegram.org/api/links#bot-links) —
+  `startapp` is passed as the Mini App start parameter. Collage launch tokens
+  now remain reusable for the bounded lifetime of a current group card; every
+  bootstrap still revalidates Telegram identity, membership, action, chat, and
+  Collage authorization.
+- [Monnify — Card Tokenization](https://developers.monnify.com/docs/collections/recurring-payments/card-tokenization) —
+  reusable card activation still requires a successful initial payment and
+  server-side transaction verification. Provider redirect and webhook receipt
+  are not treated as payment success.
+- [Monnify — Webhooks](https://developers.monnify.com/docs/webhooks) —
+  webhook acknowledgement is separated from durable queued processing,
+  deduplication, reference lookup, and server-side verification.
+
+Re-consulted on 2026-07-19 while correcting group creation launches:
+
+- [Telegram Mini Apps — Launching the main Mini App](https://core.telegram.org/bots/webapps#launching-the-main-mini-app) —
+  the official Main Mini App direct-link form is
+  `https://t.me/<bot_username>?startapp=<parameter>&mode=compact`.
+- [Telegram Mini Apps — Direct Link Mini Apps](https://core.telegram.org/bots/webapps#direct-link-mini-apps) —
+  named Mini Apps use
+  `https://t.me/<bot_username>/<short_name>?startapp=<parameter>`, while the
+  `startapp` value is delivered to the Mini App as its start parameter.
+- [Telegram Mini Apps — Validating data received via the Mini App](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app) —
+  re-consulted on 2026-07-19 after Telegram began supplying the additional
+  third-party `signature` field. Bot-token HMAC validation removes `hash` and
+  signs the remaining alphabetically sorted fields; the separate third-party
+  Ed25519 procedure excludes both `hash` and `signature`.
+
+Re-consulted on 2026-07-19 while separating payment-method add and replacement:
+
+- [Monnify — Card Tokenization](https://developers.monnify.com/docs/collections/recurring-payments/card-tokenization) —
+  a reusable token is obtained only after a successful first card payment,
+  retrieved through server-side transaction verification, and stored securely;
+  tokenization must be enabled for the merchant.
+- [Monnify — Direct Debit](https://developers.monnify.com/docs/collections/recurring-payments/direct-debit) —
+  recurring bank collection requires mandate creation and activation. Collage
+  continues to treat authorization as pending until verified activation.
+
 ## Telegram
 
 - [Telegram Mini Apps](https://core.telegram.org/bots/webapps) — official
@@ -177,3 +248,39 @@ audit:
 - [Telegram Mini Apps](https://core.telegram.org/bots/webapps) and
   [Telegram Bot API](https://core.telegram.org/bots/api) for init-data
   validation, webhook secret tokens, message updates, and pinning behavior.
+
+## Optional manual-checkout collection
+
+Reconsulted on 2026-07-19 before implementing optional recurring-payment setup:
+
+- [Monnify Checkout API](https://developers.monnify.com/docs/collections/checkout) —
+  server-side transaction initialization, provider checkout URL, payment
+  reference, redirect URL, and the documented checkout lifetime. Collage
+  initializes the checkout only for the authenticated owing member.
+- [Verify Transactions](https://developers.monnify.com/docs/collections/manage-payments/verify-transactions) —
+  server-side reference, amount, currency, and terminal-status verification
+  before ledger credit.
+- [Monnify Webhooks](https://developers.monnify.com/docs/webhooks) and
+  [Webhook Event Types](https://developers.monnify.com/docs/webhooks/event-types) —
+  signed raw-body processing, deduplication, fast acknowledgement, and queued
+  normalization. The browser return is not payment evidence.
+- [Telegram Bot API](https://core.telegram.org/bots/api#inlinekeyboardbutton) and
+  [Formatting options](https://core.telegram.org/bots/api#formatting-options) —
+  URL buttons, HTML escaping, and `tg://user?id=...` mentions. The reminder
+  resolves an opaque launch token at delivery time rather than embedding
+  financial state in the button URL.
+
+## Shared group actions and replies
+
+Reconsulted on 2026-07-19:
+
+- [Telegram `getChatMember`](https://core.telegram.org/bots/api#getchatmember) —
+  authoritative current membership lookup. Telegram documents that querying
+  other users is guaranteed when the bot is an administrator; Collage fails
+  closed when the lookup is unavailable or returns a non-member state.
+- [Telegram `ReplyParameters`](https://core.telegram.org/bots/api#replyparameters) —
+  message replies using `message_id` and
+  `allow_sending_without_reply`, used only for interactive bot responses.
+- [Telegram Mini Apps initialization](https://core.telegram.org/bots/webapps#initializing-mini-apps) —
+  server validation of init data remains mandatory for the actual user opening
+  a shared group action.

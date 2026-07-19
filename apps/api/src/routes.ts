@@ -373,6 +373,20 @@ export const createPublicRouter = (
   );
 
   router.post(
+    "/collages/:collageId/registrations/complete-manual",
+    route(async (req, res) =>
+      success(
+        res,
+        req.requestId,
+        await workflow.completeManualRegistration(
+          context(req),
+          id(req, "collageId"),
+          req.body,
+        ),
+      ),
+    ),
+  );
+  router.post(
     "/collages/:collageId/cycles/current/payments/manual",
     route(async (req, res) =>
       success(

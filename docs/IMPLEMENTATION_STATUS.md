@@ -1,6 +1,60 @@
 # Collage Implementation Status
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
+
+## Direct-debit boundary and safe tracing correction
+
+- [x] Mini App and API now share an ISO timestamp contract for mandate start
+      and end values; API normalizes these to Monnify's documented
+      seconds-only timestamp format.
+- [x] Raw direct-debit input logging was removed because it exposed email,
+      account number, and address.
+- [x] API direct-debit traces now record only safe correlation, entity, date,
+      provider-outcome, and classified-failure fields.
+- [x] Worker traces now include job start/completion/failure with queue, job,
+      and correlation IDs without logging job payloads.
+
+## Monnify direct-debit mandate timestamp correction
+
+- [x] Mandate creation sends documented `startDate`/`endDate` fields as full
+      `YYYY-MM-DDTHH:MM:SS` timestamps.
+- [x] The Mini App selects tomorrow rather than the already-current date.
+- [x] API validation rejects non-future starts and end-before-start ranges
+      before creating a provider operation.
+- [x] HTTP 400 responses remain terminal invalid requests even when Monnify
+      returns generic code `99`; they are no longer surfaced as retryable 503s.
+
+## Monnify sandbox nullable-card-token correction
+
+- [x] Transaction verification accepts the officially documented sandbox
+      `cardDetails.cardToken: null` response.
+- [x] Both documented tokenization-capability shapes are normalized without
+      exposing or fabricating card credentials.
+- [x] A paid setup with no reusable token is closed as terminal, the unusable
+      authorizing method is failed, and registration safely returns to
+      payment-method selection.
+- [x] Worker webhook processing now completes instead of retrying a schema
+      exception indefinitely.
+- [x] The Mini App explains the sandbox limitation and offers another payment
+      method; registration is not falsely completed.
+
+## Telegram action and card-registration recovery correction
+
+- [x] Current group-card `startapp` tokens are reusable for a bounded 30-day
+      lifetime; closing and reopening no longer consumes the action.
+- [x] Collage creation writes a transactional `collage.created` outbox event;
+      the bot consumes it, reloads the approved status-card view model, sends a
+      new group message, and pins/records it when permitted.
+- [x] Card and manual-payment redirects return to a real Mini App
+      `/payment-return` state instead of the API's JSON 404.
+- [x] Monnify card-setup webhooks now resolve card authorization references,
+      requery provider state, validate amount/currency/token evidence, activate
+      safely, and invoke the shared registration-completion invariant.
+- [x] API authorization verification performs the same completion invariant,
+      including recovery when the card was already activated.
+- [x] Reopened authorizing registrations receive only their opaque pending
+      authorization ID and resume server-verification polling; raw Prisma
+      member records are no longer serialized by that endpoint.
 
 ## Milestone 1 — bootstrap and design foundation
 
@@ -533,8 +587,202 @@ real-device gates remain open and are listed in `docs/KNOWN_LIMITATIONS.md`.
 | Responsive browser inspection | Pass — 390×760 and 900×900, no overflow |
 | Gradient scan                 | Pass — no CSS gradients                 |
 | `pnpm audit --prod`           | Pass — zero known vulnerabilities       |
+| Fresh Compose migration       | Pass — all 4 migrations                 |
+| Fresh Compose demo seed       | Pass — 1 user and 1 Collage             |
+| Compose configuration         | Pass — default and production overlays  |
+| No-cache image build          | Blocked — external npm registry timeout |
 
 Post-removal verification is limited to formatting, linting, typechecking,
 builds, migrations, dependency audit, Compose validation, and smoke checks by
 design. Test evidence above describes the final implementation immediately
 before the authorized deletion, not a suite that remains in the repository.
+
+The no-cache image build made no application/Dockerfile compilation failure
+visible. Repeated npm metadata and tarball timeouts ended in
+`ERR_PNPM_BROKEN_METADATA_JSON` after 9m53s. Dependency stages were then
+narrowed to each image's workspace closure and given persistent pnpm-store
+caches, frozen integrity-checked lockfile installation, and bounded network
+retries. A connected-registry rerun remains a deployment gate and is not
+reported as passed.
+
+## Telegram Main Mini App launch correction
+
+Status: implemented and locally verified on 2026-07-19.
+
+- [x] Confirmed through Telegram `getMe` that `@collage_ajo_bot` reports
+      `has_main_web_app=true`.
+- [x] Confirmed the current Mini App tunnel and API readiness endpoints return
+      HTTP 200.
+- [x] Changed group status-card buttons to Telegram's official Main Mini App
+      URL form: `https://t.me/<bot>?startapp=<opaque-token>&mode=compact`.
+- [x] Added a bot startup guard that refuses to send launch buttons when
+      BotFather does not report a configured Main Mini App.
+- [x] Preserved named Mini App link generation for deliberately named-app
+      deployments.
+- [x] Verified both Main and named link generation with two temporary unit
+      cases, then deleted the temporary test file as required.
+
+The remaining operator step is to ensure BotFather's Main Mini App URL matches
+the currently running HTTPS Mini App URL. BotFather configuration is not
+mutable or inspectable through the Bot API.
+
+## Telegram repeat-mention and bootstrap diagnostics correction
+
+Status: implemented on 2026-07-19.
+
+- [x] Explicit `/collage`, `/status`, `/rules`, and bot mentions now return a
+      visible card even when the canonical pinned card was edited successfully
+      or Telegram reports that it was unchanged.
+- [x] Removed the temporary client alert that disclosed raw Telegram init data
+      and opaque launch tokens.
+- [x] Added a real connection-error state so rejected fetches cannot fall
+      through to a permanent skeleton.
+- [x] Changed local browser API traffic from Android-invalid
+      `http://127.0.0.1:4000/v1` to the same-origin `/api/v1` Next.js rewrite.
+- [x] Wired the documented `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` policy into
+      signature verification; the default is 3600 seconds.
+- [x] Added sanitized API-terminal warnings for rejected Telegram bootstrap
+      requests. Logs contain status, error code, route, and request ID only.
+- [x] Corrected bot-token HMAC validation for Telegram's current init-data
+      format: the new third-party `signature` field remains in the HMAC
+      data-check string, while only `hash` is removed.
+- [x] Verified format, repository-wide lint, repository-wide typecheck, API
+      build, bot build, and production Mini App build.
+- [x] Verified the public HTTPS Mini App tunnel forwards
+      `/api/v1/auth/telegram/bootstrap` to the API and returns a structured
+      response with an `x-request-id`.
+
+## Collage creation policy correction
+
+Status: implemented on 2026-07-19.
+
+- [x] Removed client-owned first-cycle date, card setup policy, and card setup
+      amount from Collage creation.
+- [x] Fixed the server-owned commitment setup charge to NGN 50 (`5000` minor
+      units); stale clients sending `0` can no longer override the value.
+- [x] The exactly-once final-registration transition now writes the effective
+      first-cycle anchor and `STARTING` state in the same serializable
+      transaction.
+- [x] The Mini App explains automatic start and the fixed setup charge instead
+      of presenting editable controls.
+
+## Creator opt-in and member financial-action correction
+
+Status: implemented on 2026-07-19.
+
+- [x] A creator proceeds directly into the complete member opt-in flow after
+      creation and registration opening; no identity or financial field is
+      inferred from admin status.
+- [x] Every Collage view loads the viewer's masked registration projection.
+- [x] The dashboard shows Opt in/Continue registration, Add/Update payout
+      account, and Add/Continue/Replace payment method from current backend
+      state.
+- [x] Payment-method setup rejects an existing active method, replacement
+      rejects a missing active method, and both reject a second pending
+      authorization.
+- [x] Added a PostgreSQL partial unique index enforcing one authorizing payment
+      method per member while preserving safe active-plus-replacement overlap.
+- [x] Payout-account writes now return `added`/`updated` and append a redacted
+      audit record transactionally.
+- [x] Focused add/replace state tests passed (3 cases) and the temporary test
+      file was removed afterward.
+- [x] Migration deploy, format check, repository lint/typecheck, database/API
+      builds, and production Mini App build passed.
+
+## Payout-position response correction
+
+Status: implemented on 2026-07-19.
+
+- [x] The positions API now returns only members with assigned positive payout
+      positions; in-progress registrations with `null` positions no longer
+      invalidate the Mini App response.
+- [x] When the form's prior/default position is occupied, the Mini App selects
+      the first currently available position before submission.
+
+## Optional recurring payment and manual checkout collection
+
+Status: implemented and locally verified on 2026-07-19.
+
+- [x] Registration can complete without card or direct debit after all
+      identity, phone, payout, position, schedule, and rule evidence exists.
+- [x] Manual-payment email is encrypted at rest and hashed for operational
+      lookup; API responses and logs do not expose it.
+- [x] The final manual registration participates in the same serializable,
+      exactly-once Collage start transition as provider-authorized members.
+- [x] A member without an active recurring method becomes
+      `MANUAL_PAYMENT_REQUIRED` when their charge is due.
+- [x] A deterministic cycle reminder reloads current contribution/provider
+      state, excludes unresolved operations, safely mentions all owing members,
+      and sends one opaque Pay now Mini App action.
+- [x] Opening that action automatically creates or resumes one unresolved
+      hosted-checkout attempt; the provider call occurs outside the database
+      transaction.
+- [x] Unknown provider outcomes remain unresolved for reconciliation; terminal
+      initialization failures are recorded and can be retried with a new
+      deterministic attempt.
+- [x] Redirect return remains pending-only. Verified webhook/status evidence
+      alone credits the ledger and emits the concise group paid message.
+- [x] Collage start emits a fresh approved status card with a Pay now action.
+- [x] API terminal logs trace manual registration and checkout
+      start/resume/provider outcome using request, Collage, member,
+      contribution, and attempt IDs without email, account, token, or checkout
+      URL disclosure.
+- [x] Corrected the registered-member PostgreSQL check to accept explicit
+      `COLLECTED_UNVERIFIED` identity evidence without fabricating a verification
+      timestamp; existing encrypted in-progress identities are backfilled.
+
+## Worker notification and shared-link recovery
+
+Status: implemented and verified against the local PostgreSQL/Redis services on
+2026-07-19.
+
+- [x] Found the failed start job in BullMQ with five exhausted attempts and a
+      Zod discriminator error for legacy charge preferences.
+- [x] Normalized existing preferences and made the Mini App/API write and
+      validate the domain schedule shape.
+- [x] Corrected first-occurrence scheduling when the preferred time for the
+      opening day has already passed.
+- [x] Added replay-safe startup recovery for Collages left in `STARTING`.
+- [x] The affected Collage recovered to `ACTIVE` and created two cycles.
+- [x] Registration completion now writes its notification outbox event in the
+      same transaction; a migration recovered the two previously missing
+      events.
+- [x] Registration notification lookup now resolves the member aggregate,
+      safely mentions the member, and reports position/current participant
+      count.
+- [x] Verified all current outbox events published and the Telegram queue has
+      zero failed jobs.
+- [x] Shared group links now verify the actual opening user through Telegram
+      when local membership is missing instead of depending on the member who
+      mentioned the bot.
+- [x] Interactive commands and mention responses reply to the triggering
+      Telegram message.
+- [x] Manual completion now refreshes registration, Collage, and status
+      projections and explicitly reports when that member filled the final
+      position.
+- [x] Administrator onboarding no longer tells an already promoted bot to
+      become an administrator; it identifies the missing Pin messages
+      permission precisely.
+- [x] Confirmed the manually changed `ACTIVE` Collage had zero cycles and its
+      original start job had exhausted five attempts.
+- [x] Start job IDs now include the outbox event ID, so an explicit recovery
+      event cannot be shadowed by an old terminal BullMQ job.
+- [x] A repair migration restored the inconsistent Collage to `STARTING`,
+      emitted a fresh outbox event, and the worker moved it to `ACTIVE` with two
+      cycles.
+- [x] A 12-hour collection window whose selected 09:00 time was outside the
+      window now schedules collection at cycle opening instead of failing the
+      Collage.
+- [x] Bot terminal logs now report each successful Telegram notification
+      delivery using only safe delivery/type/chat/operation identifiers.
+
+## Active Collage payment-launch response correction
+
+Status: implemented on 2026-07-19.
+
+- [x] Mapped the server-owned Collage contribution amount to the
+      `amountPerMemberMinor` field required by the current-cycle DTO.
+- [x] Active Collage status no longer fails the Mini App response boundary
+      before the manual-payment flow can open.
+- [x] The Mini App error state now identifies whether Collage details, cycle
+      status, or member registration failed while preserving safe messaging.

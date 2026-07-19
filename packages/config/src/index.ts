@@ -64,12 +64,7 @@ const smsGateEnvironmentSchema = z.object({
     .min(1_000)
     .max(60_000)
     .default(10_000),
-  SMSGATE_TOKEN_TTL_SECONDS: z.coerce
-    .number()
-    .int()
-    .min(300)
-    .max(86_400)
-    .default(3_600),
+  SMSGATE_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300),
 });
 
 export const apiEnvironmentSchema = serviceEnvironmentSchema
@@ -80,6 +75,7 @@ export const apiEnvironmentSchema = serviceEnvironmentSchema
     CORS_ALLOWED_ORIGINS: z.string().min(1),
     MINI_APP_PUBLIC_URL: urlSchema,
     TELEGRAM_BOT_TOKEN: z.string().min(10),
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(300),
     MONNIFY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
     MONNIFY_BASE_URL: urlSchema,
     MONNIFY_API_KEY: z.string(),
@@ -229,6 +225,7 @@ export const workerEnvironmentSchema = serviceEnvironmentSchema
       z.string().min(1).optional(),
     ),
     API_PUBLIC_URL: urlSchema,
+    MINI_APP_PUBLIC_URL: urlSchema,
     WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS: z.coerce
       .number()
       .int()

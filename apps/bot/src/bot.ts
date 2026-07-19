@@ -30,7 +30,7 @@ export const TELEGRAM_ALLOWED_UPDATES = [
 ] as const;
 
 const pinGuidance =
-  "<b>Pin permission needed</b>\nMake Collage an administrator and enable <i>Pin messages</i> so the group status card can stay current.";
+  "<b>Pin permission needed</b>\nOpen Collage's administrator permissions and enable <i>Pin messages</i> so the group status card can stay current.";
 
 const isGroupChat = (
   chat: Chat,
@@ -72,10 +72,9 @@ const person = (
   role,
 });
 
-const keyboardFor = (
+export const keyboardFor = (
   card: TelegramStatusCard,
   botUsername: string,
-  shortName: string,
 ): InlineKeyboard | undefined => {
   if (card.buttons.length === 0) return undefined;
   const keyboard = new InlineKeyboard();
@@ -85,7 +84,6 @@ const keyboardFor = (
       "startAppToken" in button
         ? buildTelegramMiniAppLink({
             botUsername,
-            shortName,
             startAppToken: button.startAppToken,
             mode: "compact",
           })
@@ -115,7 +113,6 @@ const mentionDetected = (ctx: Context, username: string): boolean => {
 export interface CollageBotOptions {
   readonly token: string;
   readonly botUsername: string;
-  readonly miniAppShortName: string;
   readonly internalApi: InternalTelegramApi;
   readonly maxRateLimitRetries?: number;
   readonly onError?: (error: unknown) => void;
@@ -148,11 +145,20 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
     chatId: number | string,
     text: string,
     keyboard?: InlineKeyboard,
+    replyToMessageId?: number,
   ) =>
     api.sendMessage(chatId, text, {
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
       ...(keyboard === undefined ? {} : { reply_markup: keyboard }),
+      ...(replyToMessageId === undefined
+        ? {}
+        : {
+            reply_parameters: {
+              message_id: replyToMessageId,
+              allow_sending_without_reply: true,
+            },
+          }),
     });
 
   const ensureChat = async (ctx: Context): Promise<boolean> => {
@@ -223,11 +229,7 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
             buttons: [],
           }
         : card;
-    const keyboard = keyboardFor(
-      adminFiltered,
-      username,
-      options.miniAppShortName,
-    );
+    const keyboard = keyboardFor(adminFiltered, username);
 
     if (
       adminFiltered.pin &&
@@ -245,12 +247,26 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
             ...(keyboard === undefined ? {} : { reply_markup: keyboard }),
           },
         );
+        await sendHtml(
+          ctx.api,
+          ctx.chat.id,
+          adminFiltered.text,
+          keyboard,
+          ctx.message?.message_id,
+        );
         return;
       } catch (error) {
         if (
           error instanceof GrammyError &&
           error.description.toLowerCase().includes("message is not modified")
         ) {
+          await sendHtml(
+            ctx.api,
+            ctx.chat.id,
+            adminFiltered.text,
+            keyboard,
+            ctx.message?.message_id,
+          );
           return;
         }
         if (!(error instanceof GrammyError) || error.error_code !== 400) {
@@ -266,6 +282,7 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
       ctx.chat.id,
       adminFiltered.text,
       keyboard,
+      ctx.message?.message_id,
     );
     if (adminFiltered.pin && pinAllowed) {
       await ctx.api.pinChatMessage(ctx.chat.id, sent.message_id, {
@@ -308,7 +325,9 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
         update.chat.id,
         allowed
           ? "<b>Collage is connected.</b>\nUse /collage to create or open this group's Collage."
-          : `<b>Collage is connected.</b>\n${pinGuidance}`,
+          : update.new_chat_member.status === "administrator"
+            ? `<b>Collage is now an administrator.</b>\nPin messages is still disabled. Enable <i>Pin messages</i> in Collage's administrator permissions.`
+            : `<b>Collage is connected.</b>\n${pinGuidance}`,
       );
     }
   };
@@ -321,6 +340,8 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
       ctx.api,
       ctx.chat.id,
       "<b>Collage commands</b>\n/collage — create or open the group Collage\n/status — refresh the current status\n/rules — review the current rules\n/help — show this guide",
+      undefined,
+      ctx.message?.message_id,
     );
   });
 

@@ -144,10 +144,19 @@ export function RegistrationFlow({
   const [authorizationId, setAuthorizationId] = useState<string | null>(() =>
     typeof window === "undefined"
       ? null
-      : window.sessionStorage.getItem("collage-authorization-id"),
+      : (window.sessionStorage.getItem("collage-authorization-id") ??
+        ("paymentMethods" in initialRegistration
+          ? (initialRegistration.paymentMethods?.find(
+              (method) =>
+                method.state === "AUTHORIZING" &&
+                method.authorizationId != null,
+            )?.authorizationId ?? null)
+          : null)),
   );
   const [lastCheckedAt, setLastCheckedAt] = useState<number>();
   const [error, setError] = useState<string>();
+  const [manualMode, setManualMode] = useState(false);
+  const [collageStarted, setCollageStarted] = useState(false);
   useTelegramBack(
     () => setStep((current) => Math.max(0, current - 1)),
     step > 0 && step < 6 && authorizationId === null,
@@ -174,8 +183,9 @@ export function RegistrationFlow({
     queryFn: async () => {
       if (authorizationId === null) throw new Error("Authorization is missing");
       const result = await api.request(
-        `/payment-authorizations/${authorizationId}`,
+        `/payment-authorizations/${authorizationId}/verify`,
         authorizationSchema,
+        { method: "POST" },
       );
       setLastCheckedAt(Date.now());
       return result;
@@ -259,6 +269,23 @@ export function RegistrationFlow({
     mode: "onBlur",
   });
   const selectedMethod = payment.watch("method");
+
+  useEffect(() => {
+    if (
+      authorization.data !== undefined &&
+      ["FAILED_TERMINAL", "EXPIRED", "CANCELLED"].includes(
+        authorization.data.state,
+      )
+    ) {
+      window.sessionStorage.removeItem("collage-authorization-id");
+      setAuthorizationId(null);
+      setError(
+        selectedMethod === "card"
+          ? "Monnify confirmed the setup payment but did not provide a reusable card token. Sandbox does not issue real tokens; use direct debit for an operational sandbox registration, or enable card tokenization on the live Monnify contract."
+          : "The payment authorization ended without activation. Choose a payment method and try again.",
+      );
+    }
+  }, [authorization.data, selectedMethod]);
 
   const identityMutation = useMutation({
     mutationFn: (value: IdentityInput) =>
@@ -377,10 +404,12 @@ export function RegistrationFlow({
                 bankCode: value.bankCode,
                 accountNumber: value.accountNumber,
                 address: value.address,
-                startDate: new Date().toISOString().slice(0, 10),
-                endDate: new Date(Date.now() + 370 * 24 * 60 * 60 * 1_000)
-                  .toISOString()
-                  .slice(0, 10),
+                startDate: new Date(
+                  Date.now() + 24 * 60 * 60 * 1_000,
+                ).toISOString(),
+                endDate: new Date(
+                  Date.now() + 370 * 24 * 60 * 60 * 1_000,
+                ).toISOString(),
               },
         ),
       );
@@ -397,6 +426,34 @@ export function RegistrationFlow({
     },
     onError: (cause) => setError(errorMessage(cause)),
   });
+  const completeWithoutRecurringMethod = useMutation({
+    mutationFn: (customerEmail: string) =>
+      api.request(
+        `/collages/${collage.id}/registrations/complete-manual`,
+        z.object({
+          collageStarted: z.boolean(),
+          memberId: z.string(),
+          state: z.literal("REGISTERED"),
+        }),
+        json({ customerEmail }),
+      ),
+    onSuccess: (result) => {
+      setManualMode(true);
+      setCollageStarted(result.collageStarted);
+      setStep(6);
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["registration-completion", collage.id],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["registration", collage.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["collage", collage.id] }),
+        queryClient.invalidateQueries({ queryKey: ["status", collage.id] }),
+      ]);
+    },
+    onError: (cause) => setError(errorMessage(cause)),
+  });
 
   const availablePositions = useMemo(() => {
     if (positions.data === undefined) return [];
@@ -408,6 +465,18 @@ export function RegistrationFlow({
       (_, index) => index + 1,
     ).filter((position) => !occupied.has(position));
   }, [positions.data]);
+
+  useEffect(() => {
+    const firstAvailable = availablePositions[0];
+    if (
+      firstAvailable !== undefined &&
+      !availablePositions.includes(preference.getValues("payoutPosition"))
+    ) {
+      preference.setValue("payoutPosition", firstAvailable, {
+        shouldValidate: true,
+      });
+    }
+  }, [availablePositions, preference]);
 
   if (
     authorizationId !== null &&
@@ -828,6 +897,29 @@ export function RegistrationFlow({
             >
               Continue to Monnify
             </AsyncButton>
+            <Button
+              disabled={completeWithoutRecurringMethod.isPending}
+              onClick={() => {
+                void payment.trigger("customerEmail").then((valid) => {
+                  if (valid) {
+                    completeWithoutRecurringMethod.mutate(
+                      payment.getValues("customerEmail"),
+                    );
+                  }
+                });
+              }}
+              type="button"
+              variant="ghost"
+            >
+              {completeWithoutRecurringMethod.isPending
+                ? "Completing opt-in…"
+                : "Skip recurring payment setup"}
+            </Button>
+            <p className="field-hint">
+              You’ll be tagged in the group each cycle and will pay through a
+              secure Monnify checkout. Your payout account and obligations
+              remain the same.
+            </p>
           </form>
         ) : null}
 
@@ -840,7 +932,11 @@ export function RegistrationFlow({
             }
             description={
               completionRegistration.data?.state === "REGISTERED"
-                ? `Your payout position and active payment method for ${collage.name} were confirmed from current server state.`
+                ? manualMode
+                  ? collageStarted
+                    ? `Your payout position for ${collage.name} is confirmed. You filled the final position, so Collage is starting the first cycle now.`
+                    : `Your payout position for ${collage.name} is confirmed. You chose manual checkout and will be reminded when each contribution is due.`
+                  : `Your payout position and active payment method for ${collage.name} were confirmed from current server state.`
                 : `The payment provider confirmed your authorization for ${collage.name}. Collage is still checking the remaining identity and registration evidence; you do not count toward the group yet.`
             }
             title={
@@ -974,20 +1070,33 @@ const chargeRule = (
   collage: Collage,
   value: PreferenceInput,
 ): Record<string, number | string> => {
-  if (collage.frequency === "DAILY") return { time: value.time };
+  const [hour = 0, minute = 0] = value.time.split(":").map(Number);
+  if (collage.frequency === "DAILY") return { kind: "DAILY", hour, minute };
   if (collage.frequency === "WEEKLY")
-    return { dayOfWeek: value.dayOfWeek, time: value.time };
+    return {
+      kind: "WEEKLY",
+      weekday: value.dayOfWeek === 0 ? 7 : value.dayOfWeek,
+      hour,
+      minute,
+    };
   if (collage.frequency === "MONTHLY")
     return {
-      weekOfMonth: value.weekOfMonth,
-      dayOfWeek: value.dayOfWeek,
-      time: value.time,
+      kind: "MONTHLY",
+      ordinal:
+        value.weekOfMonth === "LAST"
+          ? "last"
+          : ["FIRST", "SECOND", "THIRD", "FOURTH"].indexOf(value.weekOfMonth) +
+            1,
+      weekday: value.dayOfWeek === 0 ? 7 : value.dayOfWeek,
+      hour,
+      minute,
     };
   return {
+    kind: "YEARLY",
     month: value.month,
-    dayOfMonth: value.dayOfMonth,
-    time: value.time,
-    invalidDatePolicy: "CLAMP_TO_LAST_VALID_DAY",
+    day: value.dayOfMonth,
+    hour,
+    minute,
   };
 };
 

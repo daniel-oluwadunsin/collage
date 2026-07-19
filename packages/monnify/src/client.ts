@@ -232,10 +232,24 @@ export class MonnifyClient {
         paymentStatus: requiredString,
         transactionReference: requiredString,
         cardDetails: z
-          .object({ cardToken: z.string().min(1).optional() })
+          .object({
+            cardToken: z.string().min(1).nullable().optional(),
+            supportsTokenization: z.boolean().optional(),
+            reusable: z
+              .union([
+                z.boolean(),
+                z.object({ supportsTokenization: z.boolean() }),
+              ])
+              .optional(),
+          })
           .optional(),
       }),
     );
+    const supportsTokenization =
+      body.cardDetails?.supportsTokenization ??
+      (typeof body.cardDetails?.reusable === "object"
+        ? body.cardDetails.reusable.supportsTokenization
+        : undefined);
     return {
       amountPaidMinor: providerAmountToMinor(body.amountPaid),
       currency: body.currency,
@@ -246,9 +260,10 @@ export class MonnifyClient {
       ...(body.paymentMethod === undefined
         ? {}
         : { paymentMethod: body.paymentMethod }),
-      ...(body.cardDetails?.cardToken === undefined
+      ...(body.cardDetails?.cardToken == null
         ? {}
         : { cardToken: body.cardDetails.cardToken }),
+      ...(supportsTokenization === undefined ? {} : { supportsTokenization }),
     };
   }
 

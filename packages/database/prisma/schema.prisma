@@ -319,6 +319,8 @@ model CollageMember {
   ninHash                    String?             @db.Char(64)
   phoneEncrypted             String?
   phoneHash                  String?             @db.Char(64)
+  manualPaymentEmailEncrypted String?
+  manualPaymentEmailHash      String?             @db.Char(64)
   phoneVerifiedAt            DateTime?           @db.Timestamptz(6)
   identityVerifiedAt         DateTime?           @db.Timestamptz(6)
   identityVerificationMode   String?             @db.VarChar(32)

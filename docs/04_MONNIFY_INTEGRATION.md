@@ -64,11 +64,12 @@ Important:
 - token is encrypted at rest and never returned to browser;
 - token expiry or rejection moves the method to replacement-required state.
 
-The card setup policy is configuration-driven:
+For the MVP, the card setup policy is server-owned:
 
-- a commitment deposit credited to the first cycle;
-- the first contribution paid in advance; or
-- explicit sandbox-only simulation.
+- charge a fixed NGN 50 (`5000` minor units) commitment setup amount;
+- never accept the setup amount from the Mini App;
+- verify the exact NGN amount server-side before activating the reusable
+  payment method.
 
 ## 5. Direct debit
 

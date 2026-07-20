@@ -2,6 +2,33 @@
 
 Last updated: 2026-07-19
 
+## Render single-container free demo deployment
+
+Status: implemented; validation evidence is recorded below.
+
+- [x] Added a Render Blueprint for one free Docker Web Service, one free
+      PostgreSQL database, and one free no-eviction Key Value instance in
+      Frankfurt.
+- [x] Added a combined image that builds API, bot, worker, and Mini App while
+      retaining their separate process and port boundaries.
+- [x] Added a fail-fast supervisor that deploys Prisma migrations before
+      startup, forwards shutdown signals, and terminates the deployment if a
+      critical process exits.
+- [x] Added a streaming path gateway for the canonical
+      `https://collage-apiconf.onrender.com` origin, including exact Telegram
+      and Monnify webhook routing and combined readiness.
+- [x] Kept provider calls fail-closed and documented scale-to-zero, free
+      database expiry/no-backup, and non-durable queue limitations.
+- [x] Hardened Docker context exclusions so no root or workspace-local `.env`
+      file can enter an image build; `.env.example` files remain available.
+- [x] Verified format, lint, typecheck, monorepo build, Linux/amd64 combined
+      image build, non-root runtime metadata, gateway path routing, raw webhook
+      body streaming, and combined readiness.
+- [ ] Create the Blueprint in the user's Render account and enter the
+      user/provider-owned `sync: false` secrets.
+- [ ] Confirm the assigned Render hostname, deploy health, Telegram webhook,
+      and BotFather Mini App URL in the live account.
+
 ## Direct-debit boundary and safe tracing correction
 
 - [x] Mini App and API now share an ISO timestamp contract for mandate start

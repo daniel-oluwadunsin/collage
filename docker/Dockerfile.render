@@ -1,0 +1,57 @@
+FROM node:24.18.0-alpine AS builder
+
+ARG NEXT_PUBLIC_API_URL=/api/v1
+ARG NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=
+ARG NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=
+ARG NEXT_PUBLIC_APP_ENV=demo
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=$NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+ENV NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME=$NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME
+ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
+
+RUN corepack enable && corepack prepare pnpm@11.14.0 --activate
+
+WORKDIR /workspace
+COPY . .
+
+RUN --mount=type=cache,id=collage-render-pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile --trust-lockfile --prefer-offline \
+    --filter @collage/api... --filter @collage/bot... \
+    --filter @collage/worker... --filter @collage/mini-app... \
+    --network-concurrency=4 --fetch-retries=5 --fetch-timeout=900000
+RUN pnpm --filter @collage/database prisma:generate
+RUN pnpm --filter @collage/api... --filter @collage/bot... \
+    --filter @collage/worker... --filter @collage/mini-app... build
+RUN cp -R apps/mini-app/.next/static \
+    apps/mini-app/.next/standalone/apps/mini-app/.next/static && \
+    if [ -d apps/mini-app/public ]; then \
+      cp -R apps/mini-app/public \
+      apps/mini-app/.next/standalone/apps/mini-app/public; \
+    fi
+
+FROM node:24.18.0-alpine AS runtime
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV API_PORT=4000
+ENV BOT_PORT=4001
+ENV WORKER_HEALTH_PORT=4002
+
+RUN corepack enable && corepack prepare pnpm@11.14.0 --activate && \
+    addgroup --system --gid 1001 collage && \
+    adduser --system --uid 1001 --ingroup collage collage
+
+WORKDIR /workspace
+COPY --from=builder --chown=collage:collage /workspace /workspace
+
+USER collage
+EXPOSE 10000
+
+CMD ["node", "docker/render/supervisor.mjs"]

@@ -590,3 +590,19 @@ its opaque authorization ID so a reopened Mini App can safely resume polling.
 - Reason: `Cycle.expectedAmountMinor` is the full group pot and cannot be used
   as the member's payable amount. Returning the raw Prisma cycle omitted the
   per-member amount and made every active status response invalid.
+
+## D-052 — Render demo shares one scale-to-zero container
+
+- Date: 2026-07-19
+- Decision: the free Render demo runs API, bot, worker, Mini App, and a
+  path-routing gateway as separate processes in one Docker Web Service at
+  `https://collage-apiconf.onrender.com`. PostgreSQL and Redis-compatible Key
+  Value remain managed external resources. Provider calls remain disabled by
+  default, migrations complete before processes start, and any critical child
+  exit terminates the whole container.
+- Reason: Render does not offer free background workers, and multiple
+  always-running free web services exceed the shared free-hour allowance.
+  Co-location wakes the worker with the user-facing demo while preserving
+  application code boundaries. Scale-to-zero, non-durable free queues, and
+  expiring unbacked free PostgreSQL make this explicitly unsuitable for real
+  money or production data.

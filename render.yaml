@@ -1,0 +1,151 @@
+services:
+  - type: web
+    name: collage-apiconf
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./docker/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health/ready
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: API_PORT
+        value: 4000
+      - key: BOT_PORT
+        value: 4001
+      - key: WORKER_HEALTH_PORT
+        value: 4002
+      - key: PUBLIC_APP_URL
+        value: https://collage-apiconf.onrender.com
+      - key: API_PUBLIC_URL
+        value: https://collage-apiconf.onrender.com/api
+      - key: MINI_APP_PUBLIC_URL
+        value: https://collage-apiconf.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://collage-apiconf.onrender.com
+      - key: INTERNAL_API_URL
+        value: http://127.0.0.1:4000
+      - key: API_INTERNAL_URL
+        value: http://127.0.0.1:4000
+      - key: NEXT_PUBLIC_API_URL
+        value: /api/v1
+      - key: NEXT_PUBLIC_APP_ENV
+        value: demo
+      - key: TELEGRAM_WEBHOOK_PUBLIC_URL
+        value: https://collage-apiconf.onrender.com/telegram/webhook
+      - key: TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
+        value: 3600
+      - key: BOT_INTERNAL_REQUEST_TIMEOUT_MS
+        value: 5000
+      - key: TELEGRAM_NOTIFICATION_CONCURRENCY
+        value: 4
+      - key: TELEGRAM_RATE_LIMIT_MAX_RETRIES
+        value: 2
+      - key: PROVIDER_CALLS_ENABLED
+        value: "false"
+      - key: MONNIFY_ENV
+        value: sandbox
+      - key: MONNIFY_BASE_URL
+        value: https://sandbox.monnify.com
+      - key: MONNIFY_API_KEY
+        value: ""
+      - key: MONNIFY_SECRET_KEY
+        value: ""
+      - key: MONNIFY_CONTRACT_CODE
+        value: ""
+      - key: MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER
+        value: ""
+      - key: MONNIFY_WEBHOOK_ALLOWED_IPS
+        value: 35.242.133.146
+      - key: MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS
+        value: "false"
+      - key: OTP_PROVIDER
+        value: unconfigured
+      - key: OTP_TTL_SECONDS
+        value: 600
+      - key: SMSGATE_API_BASE_URL
+        value: https://api.sms-gate.app/3rdparty/v1
+      - key: SMSGATE_DEPLOYMENT_MODE
+        value: cloud
+      - key: SMSGATE_AUTH_MODE
+        value: jwt
+      - key: SMSGATE_USERNAME
+        value: ""
+      - key: SMSGATE_PASSWORD
+        value: ""
+      - key: SMSGATE_SIM_NUMBER
+        value: 1
+      - key: SMSGATE_PRIORITY
+        value: 100
+      - key: SMSGATE_REQUEST_TIMEOUT_MS
+        value: 10000
+      - key: SMSGATE_TOKEN_TTL_SECONDS
+        value: 3600
+      - key: WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS
+        value: 3
+      - key: WORKER_PENDING_POLL_SECONDS
+        value: 60
+      - key: WORKER_STALE_OPERATION_MINUTES
+        value: 15
+      - key: WORKER_OUTBOX_CONCURRENCY
+        value: 1
+      - key: WORKER_LIFECYCLE_CONCURRENCY
+        value: 2
+      - key: WORKER_PAYMENT_CONCURRENCY
+        value: 2
+      - key: WORKER_PAYOUT_CONCURRENCY
+        value: 1
+      - key: WORKER_REMINDER_CONCURRENCY
+        value: 1
+      - key: DATABASE_URL
+        fromDatabase:
+          name: collage-apiconf-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: collage-apiconf-redis
+          property: connectionString
+      - key: APP_ENCRYPTION_KEY_ID
+        sync: false
+      - key: APP_ENCRYPTION_KEY_BASE64
+        sync: false
+      - key: APP_HASH_PEPPER
+        sync: false
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: LAUNCH_TOKEN_HASH_SECRET
+        sync: false
+      - key: API_SESSION_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_MINI_APP_SHORT_NAME
+        sync: false
+      - key: NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: NEXT_PUBLIC_TELEGRAM_MINI_APP_SHORT_NAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+
+  - type: keyvalue
+    name: collage-apiconf-redis
+    plan: free
+    region: frankfurt
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: collage-apiconf-db
+    plan: free
+    region: frankfurt
+    databaseName: collage
+    user: collage
+    ipAllowList: []

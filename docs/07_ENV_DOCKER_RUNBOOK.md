@@ -520,6 +520,83 @@ Requirements:
 - horizontal workers rely on queue + DB invariants;
 - bot scaling preserves safe update processing.
 
+### 10.1 Render free demo deployment
+
+The repository includes a deliberately non-production Render Blueprint at
+`render.yaml`. It deploys the API, bot, worker, Mini App, and a small routing
+gateway as separate processes inside one free Docker Web Service. Render
+Postgres and Render Key Value remain separate managed free resources; they
+must never be placed in the application container because its filesystem is
+ephemeral.
+
+Canonical demo origin:
+
+```text
+https://collage-apiconf.onrender.com
+```
+
+Public routes:
+
+| Route                                            | Destination                         |
+| ------------------------------------------------ | ----------------------------------- |
+| `/`                                              | Mini App on internal port `3000`    |
+| `/api/v1/*`                                      | API `/v1/*` on internal port `4000` |
+| `/api/webhooks/monnify`                          | API `/webhooks/monnify`             |
+| `/telegram/webhook`                              | bot on internal port `4001`         |
+| `/bot/health/live` and `/bot/health/ready`       | bot health routes                   |
+| `/worker/health/live` and `/worker/health/ready` | worker health routes                |
+| `/health/live` and `/health/ready`               | combined deployment health          |
+
+The gateway removes only the leading `/api` segment before forwarding. It
+streams request bodies instead of parsing them, preserving the exact Monnify
+webhook bytes required for signature validation.
+
+Deploy through **New → Blueprint** in Render and select this repository.
+Before the first deployment, provide every Blueprint variable marked
+`sync: false`. Generate independent values:
+
+```bash
+openssl rand -base64 32 # APP_ENCRYPTION_KEY_BASE64
+openssl rand -hex 32    # APP_HASH_PEPPER
+openssl rand -hex 32    # INTERNAL_SERVICE_TOKEN
+openssl rand -hex 32    # LAUNCH_TOKEN_HASH_SECRET
+openssl rand -hex 32    # API_SESSION_SECRET
+openssl rand -hex 32    # TELEGRAM_WEBHOOK_SECRET
+```
+
+Set `APP_ENCRYPTION_KEY_ID` to an immutable label such as
+`collage-render-demo-2026-07`. Obtain the Telegram bot token, username, and Mini
+App short name from BotFather. The two `NEXT_PUBLIC_TELEGRAM_*` values must
+match their server-side counterparts because the browser values are compiled
+into the Mini App.
+
+The container runs `prisma migrate deploy` before starting any long-running
+process. It then starts all application processes and the public gateway. A
+critical child-process exit terminates the container so Render restarts the
+whole demo consistently. Graceful termination is forwarded to API, bot,
+worker, and Mini App.
+
+After deployment:
+
+1. Open `https://collage-apiconf.onrender.com/health/ready` and wait for `200`.
+2. Open the Mini App origin and confirm the design shell loads.
+3. In BotFather, set the Mini App URL to the canonical demo origin.
+4. Confirm Telegram webhook configuration points to
+   `https://collage-apiconf.onrender.com/telegram/webhook`.
+5. If Monnify sandbox is intentionally enabled later, configure its webhook as
+   `https://collage-apiconf.onrender.com/api/webhooks/monnify` and reverify the
+   current official signature/source rules first.
+
+Free-demo limitations are binding:
+
+- `PROVIDER_CALLS_ENABLED` stays `false` by default;
+- the whole service scales to zero after inactivity, stopping scheduled work;
+- the next HTTP request wakes API, bot, worker, and Mini App together;
+- free Key Value is non-durable, so queued jobs can disappear after restart;
+- free Postgres expires after 30 days and provides no backup;
+- this topology must not process real contributions, production identity data,
+  payouts, or other live financial activity.
+
 ## 11. CI pipeline
 
 On pull request:

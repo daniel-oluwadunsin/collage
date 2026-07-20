@@ -8,10 +8,10 @@ let shuttingDown = false;
 const runMigration = () =>
   new Promise((resolve, reject) => {
     const migration = spawn(
-      "pnpm",
-      ["--filter", "@collage/database", "prisma:migrate:deploy"],
+      "node",
+      ["node_modules/prisma/build/index.js", "migrate", "deploy"],
       {
-        cwd: workspace,
+        cwd: `${workspace}/packages/database`,
         env: process.env,
         stdio: "inherit",
       },

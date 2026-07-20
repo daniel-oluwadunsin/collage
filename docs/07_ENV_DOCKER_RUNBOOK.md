@@ -570,11 +570,13 @@ App short name from BotFather. The two `NEXT_PUBLIC_TELEGRAM_*` values must
 match their server-side counterparts because the browser values are compiled
 into the Mini App.
 
-The container runs `prisma migrate deploy` before starting any long-running
-process. It then starts all application processes and the public gateway. A
-critical child-process exit terminates the container so Render restarts the
-whole demo consistently. Graceful termination is forwarded to API, bot,
-worker, and Mini App.
+The container invokes the already-installed Prisma CLI directly to run
+`prisma migrate deploy` before starting any long-running process. Runtime
+migrations do not invoke Corepack or reinstall workspace dependencies, and the
+application continues to run as a non-root user. It then starts all application
+processes and the public gateway. A critical child-process exit terminates the
+container so Render restarts the whole demo consistently. Graceful termination
+is forwarded to API, bot, worker, and Mini App.
 
 After deployment:
 

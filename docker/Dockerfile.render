@@ -36,16 +36,13 @@ RUN cp -R apps/mini-app/.next/static \
 
 FROM node:24.18.0-alpine AS runtime
 
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV API_PORT=4000
 ENV BOT_PORT=4001
 ENV WORKER_HEALTH_PORT=4002
 
-RUN corepack enable && corepack prepare pnpm@11.14.0 --activate && \
-    addgroup --system --gid 1001 collage && \
+RUN addgroup --system --gid 1001 collage && \
     adduser --system --uid 1001 --ingroup collage collage
 
 WORKDIR /workspace

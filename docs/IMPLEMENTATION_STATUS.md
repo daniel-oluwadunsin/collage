@@ -6,6 +6,10 @@ Last updated: 2026-07-19
 
 Status: implemented; validation evidence is recorded below.
 
+- [x] Corrected the Render migration launcher after the first live startup
+      exposed pnpm's runtime dependency-status write under the non-root user.
+      The supervisor now invokes the image's installed Prisma CLI directly,
+      without a Corepack download, package install, or workspace-root write.
 - [x] Added a Render Blueprint for one free Docker Web Service, one free
       PostgreSQL database, and one free no-eviction Key Value instance in
       Frankfurt.

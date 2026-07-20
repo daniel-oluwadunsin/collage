@@ -46,7 +46,7 @@ services:
       - key: TELEGRAM_RATE_LIMIT_MAX_RETRIES
         value: 2
       - key: PROVIDER_CALLS_ENABLED
-        value: "false"
+        value: "true"
       - key: MONNIFY_ENV
         value: sandbox
       - key: MONNIFY_BASE_URL
@@ -62,7 +62,7 @@ services:
       - key: MONNIFY_WEBHOOK_ALLOWED_IPS
         value: 35.242.133.146
       - key: MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS
-        value: "false"
+        value: "true"
       - key: OTP_PROVIDER
         value: unconfigured
       - key: OTP_TTL_SECONDS

@@ -74,11 +74,13 @@ services:
       - key: SMSGATE_AUTH_MODE
         value: jwt
       - key: SMSGATE_USERNAME
-        value: ""
+        value: "PEIUXS"
       - key: SMSGATE_PASSWORD
-        value: ""
+        value: "4ushxvkdlpiqa_"
       - key: SMSGATE_SIM_NUMBER
         value: 1
+      - key: SMSGATE_DEVICE_ID
+        value: "mYm2t9ttuVdi-74lxVxbL"
       - key: SMSGATE_PRIORITY
         value: 100
       - key: SMSGATE_REQUEST_TIMEOUT_MS

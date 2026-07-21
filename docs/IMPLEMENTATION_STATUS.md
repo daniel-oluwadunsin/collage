@@ -2,6 +2,15 @@
 
 Last updated: 2026-07-21
 
+## Mini App cycle-history response correction
+
+Status: implemented on 2026-07-21.
+
+- [x] History cycles now use the same presentation DTO as current-cycle
+      status, including the server-owned per-member contribution amount.
+- [x] Raw Prisma cycle rows are no longer returned to the Mini App history
+      schema, and BigInt values remain safely serialized as strings.
+
 ## Assistant application-rate adjustment
 
 Status: implemented on 2026-07-21.

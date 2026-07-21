@@ -847,13 +847,17 @@ export class DatabaseWorkflowService implements WorkflowService {
     context: RequestContext,
     collageId: string,
   ): Promise<ApiData> {
-    await this.collageForUser(context, collageId);
+    const collage = await this.collageForUser(context, collageId);
+    const cycles = await this.options.client.cycle.findMany({
+      where: { collageId },
+      include: { payout: { select: { id: true, state: true } } },
+      orderBy: { number: "desc" },
+    });
     return asData(
-      await this.options.client.cycle.findMany({
-        where: { collageId },
-        include: { payout: { select: { id: true, state: true } } },
-        orderBy: { number: "desc" },
-      }),
+      cycles.map((cycle) => ({
+        ...cycle,
+        amountPerMemberMinor: collage.contributionAmountMinor,
+      })),
     );
   }
 

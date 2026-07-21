@@ -2,6 +2,11 @@
 
 Re-consulted on 2026-07-21 for the Groq-powered Collage assistant:
 
+- [Groq — Rate Limits](https://console.groq.com/docs/rate-limits) — provider
+  limits are organization-level ceilings across request and token windows;
+  exact limits are account-specific and cannot be raised by Collage runtime
+  environment variables.
+
 - [Groq — OpenAI GPT-OSS 20B model](https://console.groq.com/docs/model/openai-gpt-oss-20b) —
   confirms the selected `openai/gpt-oss-20b` deployment model supports local
   tool use, function calling, reasoning, and low/medium/high reasoning modes.

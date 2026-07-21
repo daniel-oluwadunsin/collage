@@ -234,17 +234,16 @@ function CollageRoute({
           variant="error"
         />
       );
-    if (registration.data.state === "REGISTERED")
+    if (
+      ["REGISTERED", "AT_RISK", "DELINQUENT", "DEFAULTED"].includes(
+        registration.data.state,
+      )
+    )
       return (
-        <StatePage
-          action={
-            <Button onClick={() => window.location.reload()} type="button">
-              View current Collage
-            </Button>
-          }
-          description={`You already hold payout position ${registration.data.payoutPosition} in ${collage.data.name}. A second registration was not created.`}
-          title="Already registered"
-          variant="success"
+        <CollageDashboard
+          action="VIEW_COLLAGE"
+          registration={registration.data}
+          status={status.data}
         />
       );
     const occupied = status.data.memberCounts.reduce(
@@ -293,9 +292,20 @@ function CollageRoute({
     return <PayoutRecovery collage={collage.data} payoutId={payoutId} />;
   }
   if (registration.data === undefined) return <FullPageSkeleton />;
+  const dashboardAction =
+    action === "PAY_CONTRIBUTION" &&
+    (status.data.currentUserContribution === null ||
+      ![
+        "SCHEDULED",
+        "FAILED_RETRYABLE",
+        "MANUAL_PAYMENT_REQUIRED",
+        "OVERDUE",
+      ].includes(status.data.currentUserContribution.state))
+      ? "VIEW_COLLAGE"
+      : action;
   return (
     <CollageDashboard
-      action={action}
+      action={dashboardAction}
       registration={registration.data}
       status={status.data}
     />

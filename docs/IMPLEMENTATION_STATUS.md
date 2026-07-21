@@ -2,6 +2,20 @@
 
 Last updated: 2026-07-21
 
+## Assistant application-rate adjustment
+
+Status: implemented on 2026-07-21.
+
+- [x] Increased Collage's Redis-backed assistant allowance from 5 to 20
+      questions per user per minute and from 20 to 100 per chat per minute in
+      the local environment and Render Blueprint.
+- [x] Kept `GROQ_MAX_TOOL_CALLS=1` and the existing one-request/no-retry
+      provider boundary.
+- [x] Documented that these application limits do not increase Groq's
+      organization-level provider quota.
+- [x] Removed duplicate Blueprint configuration and replaced committed Groq
+      and demo-control credentials with dashboard-managed secret entries.
+
 ## Groq-powered Collage assistant
 
 Status: implementation complete; verification evidence is recorded below.
@@ -82,6 +96,22 @@ Status: implemented on 2026-07-21.
       then polling stops after the Collage leaves registration, covering
       Telegram webviews that resume without a browser focus event.
 - [x] Counts remain scoped to the authorized Collage and expose no member PII.
+
+## Mini App returning-member dashboard routing
+
+Status: implemented on 2026-07-21.
+
+- [x] Reopening a join action as a registered or obligation-bearing member now
+      opens the normal Collage dashboard instead of an `Already registered`
+      interstitial.
+- [x] Authenticated Collage status includes only the current user's own
+      current-cycle contribution state, amount, currency, and paid timestamp.
+- [x] A group `Pay now` action automatically starts checkout only when the
+      server reports a currently payable contribution. Paid members and users
+      without a payable contribution see the normal dashboard, avoiding a
+      known `NO_PAYABLE_CONTRIBUTION` conflict.
+- [x] Redirects and client-side state are still never treated as proof of
+      payment; the routing decision uses authoritative database state.
 
 ## User-facing naira formatting correction
 

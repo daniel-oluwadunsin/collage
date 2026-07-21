@@ -177,9 +177,9 @@ services:
       - key: ASSISTANT_MAX_MESSAGE_LENGTH
         value: "1000"
       - key: ASSISTANT_USER_RATE_LIMIT_PER_MINUTE
-        value: "5"
-      - key: ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE
         value: "20"
+      - key: ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE
+        value: "100"
 
   - type: keyvalue
     name: collage-apiconf-redis

@@ -78,6 +78,24 @@ export const statusSchema = z.object({
     z.object({ state: z.string(), _count: z.number().int().nonnegative() }),
   ),
   currentCycle: cycleSchema.nullable(),
+  currentUserContribution: z
+    .object({
+      id: z.string(),
+      state: z.enum([
+        "SCHEDULED",
+        "CHARGE_PENDING",
+        "PAID",
+        "FAILED_RETRYABLE",
+        "MANUAL_PAYMENT_REQUIRED",
+        "OVERDUE",
+        "DEFAULTED",
+        "REVERSED",
+      ]),
+      amountMinor: money,
+      currency: z.literal("NGN"),
+      paidAt: nullableDate,
+    })
+    .nullable(),
 });
 
 export const registrationSchema = z.union([

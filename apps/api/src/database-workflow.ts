@@ -750,27 +750,56 @@ export class DatabaseWorkflowService implements WorkflowService {
     collageId: string,
   ): Promise<ApiData> {
     const collage = await this.collageForUser(context, collageId);
-    const [members, registeredMemberCount, currentCycle] = await Promise.all([
-      this.options.client.collageMember.groupBy({
-        by: ["state"],
-        where: { collageId },
-        _count: true,
-      }),
-      this.options.client.collageMember.count({
-        where: {
-          collageId,
-          state: { in: ["REGISTERED", "AT_RISK", "DELINQUENT", "DEFAULTED"] },
-        },
-      }),
-      this.options.client.cycle.findFirst({
-        where: { collageId, state: { not: "COMPLETED" } },
-        orderBy: { number: "asc" },
-      }),
-    ]);
+    const [members, registeredMemberCount, currentCycle, currentMember] =
+      await Promise.all([
+        this.options.client.collageMember.groupBy({
+          by: ["state"],
+          where: { collageId },
+          _count: true,
+        }),
+        this.options.client.collageMember.count({
+          where: {
+            collageId,
+            state: { in: ["REGISTERED", "AT_RISK", "DELINQUENT", "DEFAULTED"] },
+          },
+        }),
+        this.options.client.cycle.findFirst({
+          where: { collageId, state: { not: "COMPLETED" } },
+          orderBy: { number: "asc" },
+        }),
+        this.options.client.collageMember.findUnique({
+          where: {
+            collageId_userId: {
+              collageId,
+              userId: context.principal.userId,
+            },
+          },
+          select: { id: true },
+        }),
+      ]);
+    const currentUserContribution =
+      currentCycle === null || currentMember === null
+        ? null
+        : await this.options.client.cycleContribution.findUnique({
+            where: {
+              cycleId_memberId: {
+                cycleId: currentCycle.id,
+                memberId: currentMember.id,
+              },
+            },
+            select: {
+              id: true,
+              state: true,
+              amountMinor: true,
+              currency: true,
+              paidAt: true,
+            },
+          });
     return asData({
       collage,
       memberCounts: members,
       registeredMemberCount,
+      currentUserContribution,
       currentCycle:
         currentCycle === null
           ? null

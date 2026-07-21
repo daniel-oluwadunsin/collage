@@ -1087,7 +1087,7 @@ export class WorkerEngine {
           type: "contribution.reminder",
           operation: "send-group-message",
           telegramChatId: cycle.collage.chat.telegramChatId,
-          text: `Contribution reminder: ${names}. Members with a provider payment still pending are excluded.`,
+          text: `Contribution reminder: ${names}. Please pay up for the current cycle as soon as possible.`,
           parseMode: "HTML",
           buttons: [],
           actionButton: {

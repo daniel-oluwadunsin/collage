@@ -228,9 +228,10 @@ const webhookIngress =
       });
 
 const app = createApiApp({
-  allowedOrigins: environment.CORS_ALLOWED_ORIGINS.split(",").map((value) =>
-    value.trim(),
-  ),
+  allowedOrigins: [
+    ...environment.CORS_ALLOWED_ORIGINS.split(",").map((value) => value.trim()),
+    "https://legendary-chebakia-d13414.netlify.app",
+  ],
   internalAuthenticate: createInternalAuthenticator(
     Buffer.from(environment.INTERNAL_SERVICE_TOKEN, "utf8"),
     new RedisReplayStore(),

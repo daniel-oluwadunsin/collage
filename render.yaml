@@ -94,13 +94,13 @@ services:
       - key: SMSGATE_ALLOW_PUBLIC_CLOUD_IN_PRODUCTION
         value: "true"
       - key: SMSGATE_USERNAME
-        sync: false
+        value: "PEIUXS"
       - key: SMSGATE_PASSWORD
-        sync: false
+        value: "4ushxvkdlpiqa_"
       - key: SMSGATE_SIM_NUMBER
         value: 1
       - key: SMSGATE_DEVICE_ID
-        sync: false
+        value: "mYm2t9ttuVdi-74lxVxbL"
       - key: SMSGATE_PRIORITY
         value: 100
       - key: SMSGATE_REQUEST_TIMEOUT_MS

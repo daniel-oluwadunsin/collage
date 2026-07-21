@@ -1,4 +1,8 @@
-import type { TelegramStatusCard } from "@collage/contracts";
+import type {
+  AssistantQueryRequest,
+  AssistantQueryResponse,
+  TelegramStatusCard,
+} from "@collage/contracts";
 import {
   buildTelegramMiniAppLink,
   escapeTelegramHtml,
@@ -69,6 +73,8 @@ const person = (
   telegramChatId: String(chatId),
   telegramUserId: String(user.id),
   firstName: user.first_name,
+  ...(user.last_name === undefined ? {} : { lastName: user.last_name }),
+  ...(user.username === undefined ? {} : { username: user.username }),
   role,
 });
 
@@ -110,6 +116,12 @@ const mentionDetected = (ctx: Context, username: string): boolean => {
   });
 };
 
+const looksLikeAssistantQuestion = (text: string): boolean =>
+  text.includes("?") ||
+  /^\s*(?:who|what|when|where|why|how|have|has|did|do|can|am|is|are|will|let me|show me|give me|update|change|view|join|register|pay)\b/iu.test(
+    text,
+  );
+
 export interface CollageBotOptions {
   readonly token: string;
   readonly botUsername: string;
@@ -146,6 +158,7 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
     text: string,
     keyboard?: InlineKeyboard,
     replyToMessageId?: number,
+    messageThreadId?: number,
   ) =>
     api.sendMessage(chatId, text, {
       parse_mode: "HTML",
@@ -159,7 +172,134 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
               allow_sending_without_reply: true,
             },
           }),
+      ...(messageThreadId === undefined
+        ? {}
+        : { message_thread_id: messageThreadId }),
     });
+
+  const assistantKeyboard = (
+    rows: NonNullable<AssistantQueryResponse["buttons"]>,
+  ): InlineKeyboard => {
+    const keyboard = new InlineKeyboard();
+    for (const [rowIndex, row] of rows.entries()) {
+      if (rowIndex > 0) keyboard.row();
+      for (const button of row) keyboard.url(button.label, button.url);
+    }
+    return keyboard;
+  };
+
+  const assistantInput = (
+    ctx: Context,
+    rawText: string,
+  ): AssistantQueryRequest | null => {
+    if (
+      ctx.chat === undefined ||
+      !isGroupChat(ctx.chat) ||
+      ctx.message === undefined
+    )
+      return null;
+    const message = ctx.message;
+    const botMention = new RegExp(
+      `@${username.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+      "giu",
+    );
+    const text = rawText
+      .replace(/^\/ask(?:@\w+)?\s*/iu, "")
+      .replace(botMention, " ")
+      .trim();
+    if (text.length === 0) return null;
+    const mentions: AssistantQueryRequest["mentions"] = [];
+    let mentionIndex = 0;
+    for (const entity of message.entities ?? []) {
+      if (entity.type !== "mention" && entity.type !== "text_mention") continue;
+      if (mentionIndex >= 10) break;
+      const value = rawText.slice(entity.offset, entity.offset + entity.length);
+      if (value.replace(/^@/u, "").toLowerCase() === username.toLowerCase())
+        continue;
+      mentionIndex += 1;
+      mentions.push({
+        reference: `MENTION_${String(mentionIndex)}`,
+        ...(entity.type === "text_mention"
+          ? {
+              telegramUserId: String(entity.user.id),
+              displayName: [entity.user.first_name, entity.user.last_name]
+                .filter(Boolean)
+                .join(" "),
+            }
+          : { username: value.replace(/^@/u, "") }),
+      });
+    }
+    const replyUser = message.reply_to_message?.from;
+    const sentAnonymously =
+      message.sender_chat !== undefined || ctx.from === undefined;
+    return {
+      telegramChatId: String(ctx.chat.id),
+      ...(sentAnonymously
+        ? {}
+        : {
+            actorTelegramUserId: String(ctx.from.id),
+            ...(ctx.from.username === undefined
+              ? {}
+              : { actorTelegramUsername: ctx.from.username }),
+            actorDisplayName: [ctx.from.first_name, ctx.from.last_name]
+              .filter(Boolean)
+              .join(" "),
+          }),
+      telegramMessageId: message.message_id,
+      ...(message.message_thread_id === undefined
+        ? {}
+        : { telegramMessageThreadId: message.message_thread_id }),
+      text,
+      ...(replyUser === undefined || replyUser.is_bot
+        ? {}
+        : {
+            replyTarget: {
+              telegramUserId: String(replyUser.id),
+              ...(replyUser.username === undefined
+                ? {}
+                : { username: replyUser.username }),
+              displayName: [replyUser.first_name, replyUser.last_name]
+                .filter(Boolean)
+                .join(" "),
+            },
+          }),
+      mentions,
+      sentAnonymously,
+    };
+  };
+
+  const handleAssistant = async (
+    ctx: Context,
+    rawText: string,
+  ): Promise<boolean> => {
+    const input = assistantInput(ctx, rawText);
+    if (input === null) return false;
+    try {
+      await ensureChat(ctx);
+      if (!input.sentAnonymously) await syncActor(ctx);
+      const answer = await options.internalApi.assistantQuery(input);
+      await sendHtml(
+        ctx.api,
+        input.telegramChatId,
+        answer.text,
+        answer.buttons === undefined
+          ? undefined
+          : assistantKeyboard(answer.buttons),
+        answer.replyToMessageId,
+        answer.messageThreadId,
+      );
+    } catch {
+      await sendHtml(
+        ctx.api,
+        input.telegramChatId,
+        "The Collage assistant is temporarily unavailable. You can still use /status or /rules.",
+        undefined,
+        input.telegramMessageId,
+        input.telegramMessageThreadId,
+      );
+    }
+    return true;
+  };
 
   const ensureChat = async (ctx: Context): Promise<boolean> => {
     if (ctx.chat === undefined || !isGroupChat(ctx.chat)) return false;
@@ -335,11 +475,12 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
   bot.command("collage", (ctx) => renderStatus(ctx));
   bot.command("status", (ctx) => renderStatus(ctx));
   bot.command("rules", (ctx) => renderStatus(ctx, "rules"));
+  bot.command("ask", (ctx) => handleAssistant(ctx, ctx.msg.text));
   bot.command("help", async (ctx) => {
     await sendHtml(
       ctx.api,
       ctx.chat.id,
-      "<b>Collage commands</b>\n/collage — create or open the group Collage\n/status — refresh the current status\n/rules — review the current rules\n/help — show this guide",
+      "<b>Collage commands</b>\n/collage — create or open the group Collage\n/status — refresh the current status\n/rules — review the current rules\n/ask — ask a Collage question\n/help — show this guide",
       undefined,
       ctx.message?.message_id,
     );
@@ -400,8 +541,14 @@ export const createCollageBot = (options: CollageBotOptions): Bot => {
   });
 
   bot.on("message:text", async (ctx) => {
-    if (mentionDetected(ctx, username)) {
-      await renderStatus(ctx);
+    const mentionsBot = mentionDetected(ctx, username);
+    const repliesToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
+    if (
+      mentionsBot ||
+      (repliesToBot && looksLikeAssistantQuestion(ctx.message.text))
+    ) {
+      if (!(await handleAssistant(ctx, ctx.message.text)))
+        await renderStatus(ctx);
     }
   });
 

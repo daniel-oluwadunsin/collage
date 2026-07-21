@@ -39,6 +39,7 @@ await bot.api.setMyCommands([
   { command: "collage", description: "Create or open this group's Collage" },
   { command: "status", description: "Refresh the current Collage status" },
   { command: "rules", description: "Review the current Collage rules" },
+  { command: "ask", description: "Ask a question about this Collage" },
   { command: "help", description: "Show Collage bot help" },
 ]);
 await bot.api.setWebhook(environment.TELEGRAM_WEBHOOK_PUBLIC_URL, {

@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@collage/assistant": "workspace:*",
     "@collage/config": "workspace:*",
     "@collage/contracts": "workspace:*",
     "@collage/database": "workspace:*",

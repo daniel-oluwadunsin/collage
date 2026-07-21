@@ -224,6 +224,14 @@ export const openApiDocument = {
         security: [{ internalAuth: [] }],
       },
     },
+    "/internal/assistant/query": {
+      post: {
+        summary: "Route one Telegram question to one approved assistant tool",
+        description:
+          "Internal bot-only endpoint. The API resolves Collage context and authorization, calls Groq once for tool selection, executes no more than one backend tool, and returns deterministic Telegram HTML tied to the original message.",
+        security: [{ internalAuth: [] }],
+      },
+    },
     "/webhooks/monnify": {
       post: { summary: "Verified raw-body Monnify webhook ingress" },
     },

@@ -51,6 +51,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@collage/assistant':
+        specifier: workspace:*
+        version: link:../../packages/assistant
       '@collage/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -328,6 +331,34 @@ importers:
       tsx:
         specifier: 4.21.0
         version: 4.21.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/assistant:
+    dependencies:
+      '@collage/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@collage/telegram':
+        specifier: workspace:*
+        version: link:../telegram
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@collage/eslint-config':
+        specifier: workspace:*
+        version: file:packages/eslint-config(eslint@9.39.1(jiti@2.7.0))(typescript@5.9.3)
+      '@collage/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.1(jiti@2.7.0)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

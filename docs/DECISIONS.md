@@ -1,5 +1,36 @@
 # Collage Engineering Decisions
 
+## D-056 — Groq is a one-shot intent router behind the API boundary
+
+- Date: 2026-07-21
+- Decision: the bot sends trusted Telegram update context to a signed internal
+  API route. A deterministic lexical pre-router exposes at most five relevant
+  local tools to one Groq Chat Completions request. Groq selects exactly one
+  tool; strict Zod validation and API authorization precede execution, and a
+  deterministic formatter writes the Telegram HTML without a second model
+  call. There is no AI retry or fallback provider.
+- Reason: language-model convenience must not become an authorization,
+  identity, calculation, or money-movement boundary. The model sees neither
+  raw Telegram/database identifiers nor financial records. Personal pronouns
+  resolve only from the verified sender, and action tools issue only expiring,
+  owner-bound Mini App links.
+- Design impact: no new Mini App visual system was introduced. Assistant
+  buttons open the existing Collage Yellow/Blue, light/dark, compact-safe
+  flows with their existing loading, error, and provider-pending states.
+
+## D-057 — GPT-OSS 20B is the initial Groq routing model
+
+- Date: 2026-07-21
+- Decision: set `GROQ_MODEL=openai/gpt-oss-20b` in examples, Compose, and the
+  Render Blueprint while retaining environment-based override. Keep reasoning
+  effort at `low`, required tool choice, parallel calls disabled, and the
+  one-request/one-tool invariant.
+- Reason: Groq's current official model documentation identifies GPT-OSS 20B
+  as an active, cost-efficient, low-latency model supporting local function
+  calling and low reasoning effort. This workload is bounded intent selection,
+  while all authorization, data access, financial truth, and response wording
+  remain deterministic backend responsibilities.
+
 ## 2026-07-19 — A null sandbox card token is not an active payment method
 
 Monnify documents that sandbox verification may return a null real card token

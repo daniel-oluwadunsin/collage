@@ -1,6 +1,7 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import type { HealthResponse } from "@collage/contracts";
+import type { AssistantQueryResponse } from "@collage/contracts";
 import { Prisma } from "@collage/database";
 import { createLogger } from "@collage/logger";
 import { MonnifyError } from "@collage/monnify";
@@ -58,6 +59,10 @@ export interface WebhookIngress {
 }
 
 export interface ApiAppOptions {
+  readonly assistantQuery?: (
+    input: unknown,
+    requestId: string,
+  ) => Promise<AssistantQueryResponse>;
   readonly allowedOrigins?: readonly string[];
   readonly internalAuthenticate?: (
     request: Request,
@@ -309,6 +314,23 @@ export const createApiApp = (options: ApiAppOptions = {}): Express => {
   });
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
   app.use("/v1", createPublicRouter(workflow, sessions));
+  app.post(
+    "/internal/assistant/query",
+    routeInternal(options.internalAuthenticate, async (request, response) => {
+      if (options.assistantQuery === undefined) {
+        throw new ApiError(
+          503,
+          "ASSISTANT_UNAVAILABLE",
+          "The assistant is unavailable.",
+        );
+      }
+      response.status(200).json({
+        success: true,
+        data: await options.assistantQuery(request.body, request.requestId),
+        requestId: request.requestId,
+      });
+    }),
+  );
   app.use(
     "/internal/telegram",
     createInternalRouter(
@@ -372,3 +394,24 @@ export const createApiApp = (options: ApiAppOptions = {}): Express => {
 
   return app;
 };
+
+const routeInternal = (
+  authenticate: ApiAppOptions["internalAuthenticate"],
+  handler: (request: Request, response: Response) => Promise<void>,
+) => [
+  (request: Request, response: Response, next: NextFunction): void => {
+    void (
+      authenticate?.(request, response, next) ??
+      Promise.reject(
+        new ApiError(
+          401,
+          "INTERNAL_AUTH_REQUIRED",
+          "Internal authentication is required.",
+        ),
+      )
+    ).catch(next);
+  },
+  (request: Request, response: Response, next: NextFunction): void => {
+    void handler(request, response).catch(next);
+  },
+];

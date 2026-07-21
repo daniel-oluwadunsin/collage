@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  AssistantService,
+  GroqClient,
+  type AssistantRateLimiter,
+} from "@collage/assistant";
+
 import { apiEnvironmentSchema, parseEnvironment } from "@collage/config";
 import {
   checkDatabaseReadiness,
@@ -25,6 +31,10 @@ import { SmsGateClient, SmsGateOtpProvider } from "@collage/smsgate";
 import { z } from "zod";
 
 import { createApiApp } from "./app.js";
+import {
+  PrismaAssistantContextResolver,
+  PrismaAssistantToolExecutor,
+} from "./assistant.js";
 import {
   DatabaseWorkflowService,
   type OtpProvider,
@@ -59,6 +69,20 @@ class RedisReplayStore implements ReplayStore {
     return redis
       .set(`internal-auth:${key}`, "1", "PX", ttl, "NX")
       .then((result) => result === "OK");
+  }
+}
+
+class RedisAssistantRateLimiter implements AssistantRateLimiter {
+  consume(key: string, limit: number, windowSeconds: number): Promise<boolean> {
+    return redis
+      .eval(
+        "local value = redis.call('INCR', KEYS[1]); if value == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; return value <= tonumber(ARGV[2]) and 1 or 0",
+        1,
+        key,
+        windowSeconds,
+        limit,
+      )
+      .then((result) => result === 1);
   }
 }
 
@@ -180,6 +204,29 @@ const launchTokens = new LaunchTokenService(
   new PrismaLaunchTokenStore(client),
   Buffer.from(environment.LAUNCH_TOKEN_HASH_SECRET, "utf8"),
 );
+const assistant = new AssistantService({
+  enabled: environment.ASSISTANT_ENABLED,
+  maxMessageLength: environment.ASSISTANT_MAX_MESSAGE_LENGTH,
+  maxToolCalls: environment.GROQ_MAX_TOOL_CALLS,
+  userRateLimitPerMinute: environment.ASSISTANT_USER_RATE_LIMIT_PER_MINUTE,
+  chatRateLimitPerMinute: environment.ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE,
+  contextResolver: new PrismaAssistantContextResolver(client),
+  executor: new PrismaAssistantToolExecutor({
+    client,
+    encryption,
+    launchTokens,
+    botUsername: environment.TELEGRAM_BOT_USERNAME,
+    miniAppShortName: environment.TELEGRAM_MINI_APP_SHORT_NAME,
+  }),
+  groq: new GroqClient({
+    apiKey: environment.GROQ_API_KEY,
+    model: environment.GROQ_MODEL,
+    timeoutMilliseconds: environment.GROQ_TIMEOUT_MS,
+    reasoningEffort: environment.GROQ_REASONING_EFFORT,
+  }),
+  limiter: new RedisAssistantRateLimiter(),
+  logger,
+});
 const otp: OtpProvider =
   environment.OTP_PROVIDER === "smsgate"
     ? new SmsGateOtpProvider(
@@ -240,6 +287,7 @@ const webhookIngress =
       });
 
 const app = createApiApp({
+  assistantQuery: (input, requestId) => assistant.query(input, requestId),
   allowedOrigins: [
     ...environment.CORS_ALLOWED_ORIGINS.split(",").map((value) => value.trim()),
     "https://legendary-chebakia-d13414.netlify.app",

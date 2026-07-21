@@ -9,6 +9,7 @@ export const launchSchema = z
     action: z.string(),
     chatId: z.string().optional(),
     collageId: z.string().optional(),
+    resourceId: z.string().optional(),
     userId: z.string().optional(),
   })
   .nullable();

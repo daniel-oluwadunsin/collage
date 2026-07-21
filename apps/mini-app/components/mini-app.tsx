@@ -165,6 +165,9 @@ function BootRouter({ online }: { readonly online: boolean }): JSX.Element {
       action={launch.action}
       collageId={launch.collageId}
       online={online}
+      {...(launch.resourceId === undefined
+        ? {}
+        : { resourceId: launch.resourceId })}
     />
   );
 }
@@ -173,10 +176,12 @@ function CollageRoute({
   collageId,
   action,
   online,
+  resourceId,
 }: {
   readonly collageId: string;
   readonly action: string;
   readonly online: boolean;
+  readonly resourceId?: string;
 }): JSX.Element {
   const { api } = useApi();
   const collage = useQuery({
@@ -276,10 +281,8 @@ function CollageRoute({
     );
   }
   if (action === "RETRY_PAYOUT") {
-    const payoutId = new URLSearchParams(window.location.search).get(
-      "payoutId",
-    );
-    if (payoutId === null)
+    const payoutId = resourceId;
+    if (payoutId === undefined)
       return (
         <StatePage
           description="This recovery link does not identify the failed payout. Request a fresh link from the current bot status."

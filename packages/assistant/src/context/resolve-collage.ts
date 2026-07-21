@@ -1,0 +1,7 @@
+export const ACTIVE_ASSISTANT_COLLAGE_STATES = new Set([
+  "REGISTRATION_OPEN",
+  "STARTING",
+  "ACTIVE",
+  "BLOCKED",
+  "COMPLETED",
+]);

@@ -180,6 +180,22 @@ GET /health/live
 GET /health/ready
 ```
 
+## 10.1 Internal assistant API
+
+```text
+POST /internal/assistant/query
+```
+
+The route uses the existing replay-resistant internal service signature. The
+bot supplies Telegram sender, chat, message, topic, reply-target, mention, and
+anonymous-sender context. The API independently resolves the actor, fresh chat
+membership, current Collage, Collage membership, and permissions.
+
+The response is deterministic Telegram HTML with `replyToMessageId` equal to
+the triggering message and the original `messageThreadId` when present. Groq
+selects one approved tool only; it never receives a tool result and does not
+write the response copy.
+
 Telegram webhook belongs to the bot app. Monnify webhook belongs to the API.
 
 Readiness checks:

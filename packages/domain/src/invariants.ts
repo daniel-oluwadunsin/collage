@@ -18,7 +18,6 @@ export interface RegistrationReadiness {
   readonly activePaymentMethod: boolean;
   readonly identityVerified: boolean;
   readonly payoutAccountVerified: boolean;
-  readonly phoneVerified: boolean;
   readonly positionAssigned: boolean;
 }
 

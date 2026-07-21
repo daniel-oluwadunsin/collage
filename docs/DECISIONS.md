@@ -375,6 +375,9 @@ its opaque authorization ID so a reopened Mini App can safely resume polling.
 
 ## D-032 — Registration writes follow the visible step order
 
+Superseded for phone verification by D-058; the staged-write and position
+reservation decisions remain active.
+
 - Date: 2026-07-18
 - Decision: the existing registration-details endpoint accepts explicit
   `IDENTITY` and `PREFERENCES` stages in addition to its backwards-compatible
@@ -675,3 +678,17 @@ its opaque authorization ID so a reopened Mini App can safely resume polling.
 - Reason: Render correctly runs with `NODE_ENV=production`, while the demo uses
   SMSGate public cloud. Making the exception explicit preserves the secure
   default and makes a missing provider switch or failed cloud request visible.
+
+## D-058 — Phone OTP is not an opt-in invariant
+
+- Date: 2026-07-21
+- Decision: Collage registration still collects and encrypts a phone number for
+  direct-debit provider use, but no longer requires a successful OTP challenge.
+  Existing encrypted phone evidence, OTP history, SMSGate integration, and
+  routes are retained for compatibility. Identity, verified payout account,
+  unique position, schedule, current-rule acceptance, recurring-payment
+  consent, and the selected payment-mode rules remain mandatory.
+- Reason: phone possession verification adds unnecessary friction to group
+  opt-in and is not evidence that settles a contribution or payout. Removing it
+  from registration must not weaken the financial and position invariants or
+  destroy already collected sensitive evidence.

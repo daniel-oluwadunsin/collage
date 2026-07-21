@@ -104,6 +104,7 @@ export const registrationSchema = z.union([
     id: z.string(),
     state: z.string(),
     payoutPosition: z.number().int().positive().nullable(),
+    phoneCollected: z.boolean(),
     phoneVerifiedAt: nullableDate,
     acceptedRuleVersionId: z.string().nullable().optional(),
     recurringConsentAt: nullableDate,

@@ -10,7 +10,6 @@ import {
   CreditCard,
   Landmark,
   LockKeyhole,
-  ShieldCheck,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
@@ -53,7 +52,6 @@ import {
 
 const steps = [
   "Identity",
-  "Phone OTP",
   "Payout account",
   "Position & schedule",
   "Rules & consent",
@@ -65,20 +63,11 @@ const maxAutomaticProviderPolls = 150;
 const identityFormSchema = z.object({
   legalName: z.string().trim().min(3, "Enter your full legal name."),
   nin: z.string().regex(/^\d{11}$/u, "NIN must contain exactly 11 digits."),
-});
-type IdentityInput = z.infer<typeof identityFormSchema>;
-
-const phoneFormSchema = z.object({
   phone: z
     .string()
     .regex(/^\+[1-9]\d{7,14}$/u, "Use international format, for example +234…"),
 });
-type PhoneInput = z.infer<typeof phoneFormSchema>;
-
-const otpFormSchema = z.object({
-  code: z.string().regex(/^\d{6}$/u, "Enter the six-digit code."),
-});
-type OtpInput = z.infer<typeof otpFormSchema>;
+type IdentityInput = z.infer<typeof identityFormSchema>;
 
 const bankFormSchema = z.object({
   bankCode: z.string().min(2, "Choose a bank."),
@@ -114,18 +103,18 @@ const errorMessage = (error: unknown): string =>
 
 const registrationStep = (registration: Registration): number => {
   if (!("id" in registration)) return 0;
+  if (!registration.phoneCollected) return 0;
   if (registration.state === "DETAILS_SUBMITTED") return 1;
-  if (registration.phoneVerifiedAt === null) return 1;
-  if ((registration.bankAccounts?.length ?? 0) === 0) return 2;
-  if (registration.payoutPosition === null) return 3;
-  if (registration.acceptedRuleVersionId == null) return 4;
+  if ((registration.bankAccounts?.length ?? 0) === 0) return 1;
+  if (registration.payoutPosition === null) return 2;
+  if (registration.acceptedRuleVersionId == null) return 3;
   if (
     registration.state === "PAYMENT_METHOD_REQUIRED" ||
     registration.state === "IDENTITY_PENDING"
   )
-    return 5;
-  if (registration.state === "PAYMENT_METHOD_AUTHORIZING") return 5;
-  return 6;
+    return 4;
+  if (registration.state === "PAYMENT_METHOD_AUTHORIZING") return 4;
+  return 5;
 };
 
 export function RegistrationFlow({
@@ -138,7 +127,6 @@ export function RegistrationFlow({
   const { api } = useApi();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(() => registrationStep(initialRegistration));
-  const [otpRequested, setOtpRequested] = useState(false);
   const [resolved, setResolved] = useState<ResolvedAccount | null>(null);
   const [bankDraft, setBankDraft] = useState<BankInput | null>(null);
   const [authorizationId, setAuthorizationId] = useState<string | null>(() =>
@@ -159,24 +147,24 @@ export function RegistrationFlow({
   const [collageStarted, setCollageStarted] = useState(false);
   useTelegramBack(
     () => setStep((current) => Math.max(0, current - 1)),
-    step > 0 && step < 6 && authorizationId === null,
+    step > 0 && step < 5 && authorizationId === null,
   );
 
   const positions = useQuery({
     queryKey: ["positions", collage.id],
     queryFn: () =>
       api.request(`/collages/${collage.id}/positions`, positionsSchema),
-    enabled: step === 3,
+    enabled: step === 2,
   });
   const rules = useQuery({
     queryKey: ["rules", collage.id],
     queryFn: () => api.request(`/collages/${collage.id}/rules`, ruleSchema),
-    enabled: step === 4,
+    enabled: step === 3,
   });
   const banks = useQuery({
     queryKey: ["banks"],
     queryFn: () => api.request("/banks", banksSchema),
-    enabled: step === 2 || step === 5,
+    enabled: step === 1 || step === 4,
   });
   const authorization = useQuery({
     queryKey: ["authorization", authorizationId],
@@ -207,7 +195,7 @@ export function RegistrationFlow({
         `/collages/${collage.id}/me/registration`,
         registrationSchema,
       ),
-    enabled: step === 6,
+    enabled: step === 5,
     refetchInterval: (query) =>
       query.state.data?.state === "REGISTERED" ||
       query.state.dataUpdateCount >= maxAutomaticProviderPolls
@@ -220,7 +208,7 @@ export function RegistrationFlow({
       authorization.data !== undefined &&
       successfulAuthorizationStates.has(authorization.data.state)
     ) {
-      setStep(6);
+      setStep(5);
       window.sessionStorage.removeItem("collage-authorization-id");
       void queryClient.invalidateQueries({
         queryKey: ["registration-completion", collage.id],
@@ -230,15 +218,7 @@ export function RegistrationFlow({
 
   const identity = useForm<IdentityInput>({
     resolver: zodResolver(identityFormSchema),
-    mode: "onBlur",
-  });
-  const phone = useForm<PhoneInput>({
-    resolver: zodResolver(phoneFormSchema),
     defaultValues: { phone: "+234" },
-    mode: "onBlur",
-  });
-  const otp = useForm<OtpInput>({
-    resolver: zodResolver(otpFormSchema),
     mode: "onBlur",
   });
   const bank = useForm<BankInput>({
@@ -301,29 +281,6 @@ export function RegistrationFlow({
     onSuccess: () => setStep(1),
     onError: (cause) => setError(errorMessage(cause)),
   });
-  const requestOtp = useMutation({
-    mutationFn: (value: PhoneInput) =>
-      api.request(
-        `/collages/${collage.id}/registrations/phone/request-otp`,
-        z.object({
-          accepted: z.literal(true),
-          expiresInSeconds: z.number(),
-        }),
-        json(value),
-      ),
-    onSuccess: () => setOtpRequested(true),
-    onError: (cause) => setError(errorMessage(cause)),
-  });
-  const verifyOtp = useMutation({
-    mutationFn: (value: OtpInput) =>
-      api.request(
-        `/collages/${collage.id}/registrations/phone/verify`,
-        z.object({ state: z.string(), phoneVerified: z.literal(true) }),
-        json(value),
-      ),
-    onSuccess: () => setStep(2),
-    onError: (cause) => setError(errorMessage(cause)),
-  });
   const resolveBank = useMutation({
     mutationFn: (value: BankInput) =>
       api.request("/bank-accounts/resolve", resolvedAccountSchema, json(value)),
@@ -349,7 +306,7 @@ export function RegistrationFlow({
         putJson({ ...bankDraft, resolutionToken: resolved.resolutionToken }),
       );
     },
-    onSuccess: () => setStep(3),
+    onSuccess: () => setStep(2),
     onError: (cause) => setError(errorMessage(cause)),
   });
   const savePreference = useMutation({
@@ -367,7 +324,7 @@ export function RegistrationFlow({
           preferredChargeRule: chargeRule(collage, value),
         }),
       ),
-    onSuccess: () => setStep(4),
+    onSuccess: () => setStep(3),
     onError: (cause) => {
       setError(errorMessage(cause));
       void positions.refetch();
@@ -382,7 +339,7 @@ export function RegistrationFlow({
         json({ ruleVersionId: rules.data.id, recurringConsent: true }),
       );
     },
-    onSuccess: () => setStep(5),
+    onSuccess: () => setStep(4),
     onError: (cause) => setError(errorMessage(cause)),
   });
   const setupPayment = useMutation({
@@ -440,7 +397,7 @@ export function RegistrationFlow({
     onSuccess: (result) => {
       setManualMode(true);
       setCollageStarted(result.collageStarted);
-      setStep(6);
+      setStep(5);
       void Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["registration-completion", collage.id],
@@ -514,7 +471,7 @@ export function RegistrationFlow({
       <ContextHeader
         collage={collage}
         detail={
-          step === 6
+          step === 5
             ? completionRegistration.data?.state === "REGISTERED"
               ? "Registration confirmed by Collage"
               : "Final registration checks in progress"
@@ -540,8 +497,8 @@ export function RegistrationFlow({
           >
             <FlowHeading
               icon={LockKeyhole}
-              title="Your verified identity"
-              copy="Use your legal details. NIN is encrypted and is never shown in the Telegram group."
+              title="Your details"
+              copy="Use your legal details and contact number. They are encrypted and never shown in the Telegram group."
             />
             <Field
               error={identity.formState.errors.legalName?.message}
@@ -562,6 +519,17 @@ export function RegistrationFlow({
                 {...identity.register("nin")}
               />
             </Field>
+            <Field
+              error={identity.formState.errors.phone?.message}
+              hint="International format, for example +234… · no OTP required"
+              label="Phone number"
+            >
+              <Input
+                autoComplete="tel"
+                inputMode="tel"
+                {...identity.register("phone")}
+              />
+            </Field>
             <AsyncButton
               busy={identityMutation.isPending}
               busyLabel="Securing identity…"
@@ -573,77 +541,6 @@ export function RegistrationFlow({
         ) : null}
 
         {step === 1 ? (
-          <div className="flow">
-            <FlowHeading
-              icon={ShieldCheck}
-              title="Verify your phone"
-              copy="Collage sends a six-digit code through the configured private SMS gateway."
-            />
-            {!otpRequested ? (
-              <form
-                className="flow"
-                onSubmit={phone.handleSubmit((value) =>
-                  requestOtp.mutate(value),
-                )}
-              >
-                <Field
-                  error={phone.formState.errors.phone?.message}
-                  label="Phone number"
-                >
-                  <Input
-                    autoComplete="tel"
-                    inputMode="tel"
-                    {...phone.register("phone")}
-                  />
-                </Field>
-                <AsyncButton
-                  busy={requestOtp.isPending}
-                  busyLabel="Sending code…"
-                  type="submit"
-                >
-                  Send verification code
-                </AsyncButton>
-              </form>
-            ) : (
-              <form
-                className="flow"
-                onSubmit={otp.handleSubmit((value) => verifyOtp.mutate(value))}
-              >
-                <div className="attention-note">
-                  Code sent to {maskPhone(phone.getValues("phone"))}. It expires
-                  shortly.
-                </div>
-                <Field
-                  error={otp.formState.errors.code?.message}
-                  label="Six-digit code"
-                >
-                  <Input
-                    autoComplete="one-time-code"
-                    inputMode="numeric"
-                    maxLength={6}
-                    {...otp.register("code")}
-                  />
-                </Field>
-                <AsyncButton
-                  busy={verifyOtp.isPending}
-                  busyLabel="Verifying phone…"
-                  type="submit"
-                >
-                  Verify phone
-                </AsyncButton>
-                <Button
-                  onClick={() => requestOtp.mutate(phone.getValues())}
-                  type="button"
-                  variant="ghost"
-                >
-                  Send a new code
-                </Button>
-              </form>
-            )}
-          </div>
-        ) : null}
-
-        {step === 2 ? (
           <form
             className="flow"
             onSubmit={bank.handleSubmit((value) => resolveBank.mutate(value))}
@@ -714,7 +611,7 @@ export function RegistrationFlow({
           </form>
         ) : null}
 
-        {step === 3 ? (
+        {step === 2 ? (
           <form
             className="flow"
             onSubmit={preference.handleSubmit((value) =>
@@ -751,7 +648,7 @@ export function RegistrationFlow({
           </form>
         ) : null}
 
-        {step === 4 ? (
+        {step === 3 ? (
           <div className="flow">
             <FlowHeading
               icon={Users}
@@ -788,7 +685,7 @@ export function RegistrationFlow({
           </div>
         ) : null}
 
-        {step === 5 ? (
+        {step === 4 ? (
           <form
             className="flow"
             onSubmit={payment.handleSubmit((value) =>
@@ -923,7 +820,7 @@ export function RegistrationFlow({
           </form>
         ) : null}
 
-        {step === 6 ? (
+        {step === 5 ? (
           <StatePage
             action={
               <Button onClick={() => window.location.reload()} type="button">
@@ -952,7 +849,7 @@ export function RegistrationFlow({
           />
         ) : null}
       </PageTransition>
-      {step > 0 && step < 6 && authorizationId === null ? (
+      {step > 0 && step < 5 && authorizationId === null ? (
         <StickyActionBar>
           <Button
             onClick={() => setStep((current) => Math.max(0, current - 1))}
@@ -1099,8 +996,3 @@ const chargeRule = (
     minute,
   };
 };
-
-const maskPhone = (value: string): string =>
-  value.length < 7
-    ? "your phone"
-    : `${value.slice(0, 4)}••••${value.slice(-3)}`;

@@ -249,7 +249,6 @@ Collect:
 - full legal name;
 - NIN;
 - phone number;
-- phone OTP verification;
 - payout bank;
 - payout account number;
 - resolved official account name;
@@ -259,7 +258,10 @@ Collect:
 - acceptance of the exact Collage rule version;
 - acknowledgement that leaving Telegram does not cancel obligations.
 
-NIN, phone, and account number are sensitive. Encrypt at rest, return only masked representations, and never post them in a group.
+NIN, phone number, and account number are sensitive.
+Encrypt at rest, return only masked representations, and never post them in a
+group. Phone possession and OTP verification are not registration gates; the
+phone number itself remains required for direct-debit provider compatibility.
 
 ### 8.2 Preferred charge period
 

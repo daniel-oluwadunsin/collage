@@ -76,7 +76,6 @@ export function CollageDashboard({
     );
   const readyForPaymentMethod =
     hasMember &&
-    registration.phoneVerifiedAt != null &&
     registration.payoutPosition !== null &&
     registration.acceptedRuleVersionId != null &&
     registration.recurringConsentAt != null &&

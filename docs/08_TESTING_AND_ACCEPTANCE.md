@@ -133,7 +133,7 @@ Flows:
 3. Collage creation.
 4. Form validation.
 5. Light/dark theme.
-6. Identity and phone OTP.
+6. Identity and phone collection without an OTP verification gate.
 7. Bank search/account resolution.
 8. Live position conflict.
 9. Charge-preference fields per frequency.

@@ -1005,3 +1005,27 @@ Status: implemented on 2026-07-21.
 - [x] API startup logs show the selected provider and non-secret topology; OTP
       attempts log accepted, unknown, or failed outcomes without phone numbers,
       OTPs, or credentials.
+
+## Phone-verification removal
+
+Status: implemented on 2026-07-21.
+
+- [x] Removed phone OTP verification from API, worker, domain, and repository
+      registration-readiness checks while retaining encrypted phone collection
+      required by direct-debit setup.
+- [x] Added a forward-only PostgreSQL migration that relaxes the registered
+      member evidence constraint without deleting existing encrypted phone or
+      OTP records.
+- [x] Preserved SMSGate and OTP endpoints for compatibility; they are no longer
+      part of the opt-in critical path.
+- [x] Kept identity, verified payout account, unique payout position, schedule,
+      exact rule consent, and payment-mode invariants unchanged.
+- [x] Moved encrypted phone collection into the identity screen and removed the
+      separate OTP screen from the Mini App stepper.
+- [x] Resume routing sends legacy registrations without a collected phone back
+      to identity details, then proceeds directly to payout account setup.
+- [x] Shifted payout, preference, consent, payment, completion, polling, and
+      back-navigation step boundaries to the six-step journey.
+- [x] Payment-method readiness no longer depends on `phoneVerifiedAt`.
+- [x] Preserved nullable phone verification fields in response parsing so
+      existing stored registration data remains compatible.

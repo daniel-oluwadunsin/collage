@@ -65,7 +65,7 @@ export interface RegistrationEvidence {
   readonly ninHash: string;
   readonly phoneEncrypted: string;
   readonly phoneHash: string;
-  readonly phoneVerifiedAt: Date;
+  readonly phoneVerifiedAt: Date | null;
   readonly preferredChargeRule: Prisma.InputJsonValue;
   readonly recurringConsentAt: Date;
 }

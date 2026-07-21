@@ -131,7 +131,6 @@ export class WorkerEngine {
       member.ninHash === null ||
       member.phoneEncrypted === null ||
       member.phoneHash === null ||
-      member.phoneVerifiedAt === null ||
       member.preferredChargeRule === null ||
       member.recurringConsentAt === null
     ) {

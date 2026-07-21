@@ -399,13 +399,12 @@ Use React Hook Form + Zod.
 
 Recommended registration steps:
 
-1. Identity.
-2. Phone verification.
-3. Payout account.
-4. Position and charge preference.
-5. Rules and consent.
-6. Payment method.
-7. Confirmation.
+1. Identity and unverified contact phone.
+2. Payout account.
+3. Position and charge preference.
+4. Rules and consent.
+5. Payment method.
+6. Confirmation.
 
 ## 9. Motion
 

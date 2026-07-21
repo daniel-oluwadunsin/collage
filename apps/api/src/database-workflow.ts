@@ -230,6 +230,7 @@ const registrationIdentitySchema = z.object({
   stage: z.literal("IDENTITY"),
   legalName: z.string().trim().min(3).max(160),
   nin: z.string().regex(/^\d{11}$/u),
+  phone,
 });
 
 const chargePreferenceSchema = z.discriminatedUnion("kind", [
@@ -275,6 +276,7 @@ const registrationPreferencesSchema = z.object({
 const registrationLegacySchema = z.object({
   legalName: z.string().trim().min(3).max(160),
   nin: z.string().regex(/^\d{11}$/u),
+  phone,
   payoutPosition: z.number().int().positive(),
   preferredChargeRule: chargePreferenceSchema,
 });
@@ -925,6 +927,7 @@ export class DatabaseWorkflowService implements WorkflowService {
       id: member.id,
       state: member.state,
       payoutPosition: member.payoutPosition,
+      phoneCollected: member.phoneEncrypted !== null,
       phoneVerifiedAt: member.phoneVerifiedAt,
       acceptedRuleVersionId: member.acceptedRuleVersionId,
       recurringConsentAt: member.recurringConsentAt,
@@ -974,6 +977,12 @@ export class DatabaseWorkflowService implements WorkflowService {
             `member:${collageId}:nin`,
           ),
           ninHash: keyedHash(value.nin, this.options.hashKey),
+          phoneEncrypted: encryptString(
+            value.phone,
+            this.options.encryption,
+            `member:${collageId}:phone`,
+          ),
+          phoneHash: keyedHash(value.phone, this.options.hashKey),
           identityVerificationMode: "COLLECTED_UNVERIFIED",
           identityVerifiedAt: null,
         },
@@ -989,6 +998,12 @@ export class DatabaseWorkflowService implements WorkflowService {
             `member:${collageId}:nin`,
           ),
           ninHash: keyedHash(value.nin, this.options.hashKey),
+          phoneEncrypted: encryptString(
+            value.phone,
+            this.options.encryption,
+            `member:${collageId}:phone`,
+          ),
+          phoneHash: keyedHash(value.phone, this.options.hashKey),
           identityVerificationMode: "COLLECTED_UNVERIFIED",
           identityVerifiedAt: null,
           state: "DETAILS_SUBMITTED",
@@ -1057,6 +1072,12 @@ export class DatabaseWorkflowService implements WorkflowService {
           `member:${collageId}:nin`,
         ),
         ninHash: keyedHash(value.nin, this.options.hashKey),
+        phoneEncrypted: encryptString(
+          value.phone,
+          this.options.encryption,
+          `member:${collageId}:phone`,
+        ),
+        phoneHash: keyedHash(value.phone, this.options.hashKey),
         preferredChargeRule: value.preferredChargeRule as Prisma.InputJsonValue,
       },
       update: {
@@ -1072,6 +1093,12 @@ export class DatabaseWorkflowService implements WorkflowService {
           `member:${collageId}:nin`,
         ),
         ninHash: keyedHash(value.nin, this.options.hashKey),
+        phoneEncrypted: encryptString(
+          value.phone,
+          this.options.encryption,
+          `member:${collageId}:phone`,
+        ),
+        phoneHash: keyedHash(value.phone, this.options.hashKey),
         preferredChargeRule: value.preferredChargeRule as Prisma.InputJsonValue,
         state: "DETAILS_SUBMITTED",
       },
@@ -1236,7 +1263,8 @@ export class DatabaseWorkflowService implements WorkflowService {
     if (rule === null)
       throw conflict("RULE_VERSION_STALE", "The rule version is stale.");
     if (
-      member.phoneVerifiedAt === null ||
+      member.phoneEncrypted === null ||
+      member.phoneHash === null ||
       member.payoutPosition === null ||
       member.preferredChargeRule === null ||
       member.bankAccounts.length !== 1
@@ -1299,7 +1327,6 @@ export class DatabaseWorkflowService implements WorkflowService {
       member.ninHash === null ||
       member.phoneEncrypted === null ||
       member.phoneHash === null ||
-      member.phoneVerifiedAt === null ||
       member.preferredChargeRule === null ||
       member.recurringConsentAt === null
     ) {
@@ -1356,7 +1383,6 @@ export class DatabaseWorkflowService implements WorkflowService {
       evidenceMember.ninHash === null ||
       evidenceMember.phoneEncrypted === null ||
       evidenceMember.phoneHash === null ||
-      evidenceMember.phoneVerifiedAt === null ||
       evidenceMember.preferredChargeRule === null ||
       evidenceMember.recurringConsentAt === null
     ) {
@@ -1593,7 +1619,6 @@ export class DatabaseWorkflowService implements WorkflowService {
       member.legalNameEncrypted === null ||
       member.ninEncrypted === null ||
       member.phoneEncrypted === null ||
-      member.phoneVerifiedAt === null ||
       member.payoutPosition === null ||
       member.preferredChargeRule === null ||
       member.acceptedRuleVersionId === null ||

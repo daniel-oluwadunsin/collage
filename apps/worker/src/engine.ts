@@ -106,6 +106,7 @@ export interface WorkerEngineOptions {
   readonly providerEnvironment: "production" | "sandbox";
   readonly providerRedirectUrl: string;
   readonly scheduler: JobScheduler;
+  readonly simulatePendingPayoutSuccess?: boolean;
   readonly staleOperationMs: number;
 }
 
@@ -1490,6 +1491,11 @@ export class WorkerEngine {
       outcome,
       this.options.pendingPollMs,
     );
+    const simulatedSuccess =
+      this.options.simulatePendingPayoutSuccess === true &&
+      (outcome === "pending" ||
+        outcome === "pending_authorization" ||
+        outcome === "in_progress");
     let cycleId: string | undefined;
     await withSerializableTransaction(
       this.options.client,
@@ -1516,7 +1522,7 @@ export class WorkerEngine {
           });
           return;
         }
-        if (decision.kind === "succeeded") {
+        if (decision.kind === "succeeded" || simulatedSuccess) {
           const [pot, clearing] = await Promise.all([
             transaction.ledgerAccount.findUniqueOrThrow({
               where: {
@@ -1581,13 +1587,20 @@ export class WorkerEngine {
             },
           });
           await appendAuditLog(transaction, {
-            action: "payout.succeeded",
+            action: simulatedSuccess
+              ? "payout.demo-simulated-succeeded"
+              : "payout.succeeded",
             actorType: "SYSTEM",
             correlationId,
             entityType: "payout",
             entityId: attempt.payoutId,
             source: "worker",
-            safeMetadata: { attemptId: attempt.id },
+            safeMetadata: {
+              attemptId: attempt.id,
+              ...(simulatedSuccess
+                ? { providerOutcome: outcome, simulated: true }
+                : {}),
+            },
           });
           return;
         }
@@ -1644,9 +1657,12 @@ export class WorkerEngine {
         });
       },
     );
-    if (decision.kind === "poll")
+    if (decision.kind === "poll" && !simulatedSuccess)
       await this.enqueuePayoutPoll(attemptId, decision.delayMs);
-    if (decision.kind === "succeeded" && cycleId !== undefined)
+    if (
+      (decision.kind === "succeeded" || simulatedSuccess) &&
+      cycleId !== undefined
+    )
       await this.completeCycle(cycleId, correlationId);
   }
 

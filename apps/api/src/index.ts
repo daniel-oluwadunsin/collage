@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { apiEnvironmentSchema, parseEnvironment } from "@collage/config";
 import {
   checkDatabaseReadiness,
@@ -13,7 +15,11 @@ import {
   type MandateResult,
   type TransactionVerification,
 } from "@collage/monnify";
-import { createRedisConnection } from "@collage/queue";
+import {
+  createQueue,
+  createRedisConnection,
+  deterministicJobId,
+} from "@collage/queue";
 import { LaunchTokenService, type ReplayStore } from "@collage/security";
 import { SmsGateClient, SmsGateOtpProvider } from "@collage/smsgate";
 import { z } from "zod";
@@ -33,6 +39,7 @@ const environment = parseEnvironment(apiEnvironmentSchema, process.env);
 const logger = createLogger("api", { level: environment.LOG_LEVEL });
 const client = createPrismaClient(environment.DATABASE_URL);
 const redis = createRedisConnection(environment.REDIS_URL);
+const reminderQueue = createQueue("reminders", redis);
 
 class RedisReplayStore implements ReplayStore {
   claim(key: string, expiresAt: Date): Promise<boolean> {
@@ -236,6 +243,54 @@ const app = createApiApp({
   },
   sessionService: sessions,
   workflow,
+  ...(environment.DEMO_CONTROLS_ENABLED
+    ? {
+        demoControls: {
+          token: environment.DEMO_CONTROL_TOKEN,
+          triggerReminders: async () => {
+            const cycles = await client.cycle.findMany({
+              where: {
+                state: { in: ["COLLECTING", "OVERDUE"] },
+                contributions: { some: { state: { not: "PAID" } } },
+              },
+              select: { id: true },
+              take: 500,
+            });
+            const triggeredAt = new Date();
+            const triggerId = randomUUID();
+            await Promise.all(
+              cycles.map((cycle) =>
+                reminderQueue.add(
+                  "demo-cycle-reminder",
+                  {
+                    cycleId: cycle.id,
+                    scheduledFor: triggeredAt.toISOString(),
+                  },
+                  {
+                    jobId: deterministicJobId(
+                      "demo-reminder",
+                      cycle.id,
+                      triggerId,
+                    ),
+                  },
+                ),
+              ),
+            );
+            logger.info(
+              {
+                eligibleCycles: cycles.length,
+                triggerId,
+              },
+              "Demo reminders queued",
+            );
+            return {
+              eligibleCycles: cycles.length,
+              queuedReminders: cycles.length,
+            };
+          },
+        },
+      }
+    : {}),
   ...(webhookIngress === undefined ? {} : { webhookIngress }),
 });
 
@@ -246,7 +301,11 @@ const server = app.listen(environment.API_PORT, "0.0.0.0", () => {
 const shutdown = (signal: NodeJS.Signals): void => {
   logger.info({ signal }, "API shutdown requested");
   server.close((error) => {
-    void Promise.allSettled([client.$disconnect(), redis.quit()]).then(() => {
+    void Promise.allSettled([
+      reminderQueue.close(),
+      client.$disconnect(),
+      redis.quit(),
+    ]).then(() => {
       if (error !== undefined) {
         logger.error({ error }, "API shutdown failed");
         process.exitCode = 1;

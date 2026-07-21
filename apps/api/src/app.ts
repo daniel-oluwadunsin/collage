@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import type { HealthResponse } from "@collage/contracts";
 import { Prisma } from "@collage/database";
@@ -33,6 +33,19 @@ const health = (status: HealthResponse["status"]): HealthResponse => ({
   timestamp: new Date().toISOString(),
 });
 
+const secretMatches = (
+  supplied: string | undefined,
+  expected: string,
+): boolean => {
+  if (supplied === undefined) return false;
+  const suppliedBytes = Buffer.from(supplied, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  return (
+    suppliedBytes.length === expectedBytes.length &&
+    timingSafeEqual(suppliedBytes, expectedBytes)
+  );
+};
+
 export interface WebhookIngress {
   ingest(
     rawBody: Buffer,
@@ -56,6 +69,13 @@ export interface ApiAppOptions {
   readonly sessionService?: SessionService;
   readonly webhookIngress?: WebhookIngress;
   readonly workflow?: WorkflowService;
+  readonly demoControls?: {
+    readonly token: string;
+    readonly triggerReminders: () => Promise<{
+      readonly eligibleCycles: number;
+      readonly queuedReminders: number;
+    }>;
+  };
 }
 
 const defaultSession = (): SessionService =>
@@ -172,6 +192,7 @@ export const createApiApp = (options: ApiAppOptions = {}): Express => {
         "x-collage-internal-timestamp",
         "x-collage-internal-nonce",
         "x-collage-internal-signature",
+        "x-collage-demo-token",
       ],
       origin(origin, callback) {
         if (origin === undefined || allowedOrigins.has(origin)) {
@@ -267,6 +288,24 @@ export const createApiApp = (options: ApiAppOptions = {}): Express => {
   });
   app.get("/openapi.json", (_request, response) => {
     response.status(200).json(openApiDocument);
+  });
+  app.post("/internal/demo/reminders", (request, response, next) => {
+    const controls = options.demoControls;
+    if (
+      controls === undefined ||
+      !secretMatches(request.get("x-collage-demo-token"), controls.token)
+    ) {
+      next(
+        new ApiError(404, "NOT_FOUND", "The requested resource was not found."),
+      );
+      return;
+    }
+    void controls
+      .triggerReminders()
+      .then((result) =>
+        response.status(202).json({ success: true, data: result }),
+      )
+      .catch(next);
   });
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
   app.use("/v1", createPublicRouter(workflow, sessions));

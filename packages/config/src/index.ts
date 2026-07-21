@@ -90,12 +90,24 @@ export const apiEnvironmentSchema = serviceEnvironmentSchema
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
+    DEMO_CONTROLS_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    DEMO_CONTROL_TOKEN: z.string().default(""),
   })
   .and(persistenceEnvironmentSchema)
   .and(cryptographyEnvironmentSchema)
   .and(providerSwitchSchema)
   .and(smsGateEnvironmentSchema)
   .superRefine((value, context) => {
+    if (value.DEMO_CONTROLS_ENABLED && value.DEMO_CONTROL_TOKEN.length < 32) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "DEMO_CONTROL_TOKEN must contain at least 32 characters when demo controls are enabled",
+      });
+    }
     if (
       value.PROVIDER_CALLS_ENABLED &&
       [
@@ -226,6 +238,10 @@ export const workerEnvironmentSchema = serviceEnvironmentSchema
     ),
     API_PUBLIC_URL: urlSchema,
     MINI_APP_PUBLIC_URL: urlSchema,
+    HACKATHON_DEMO_MODE: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS: z.coerce
       .number()
       .int()
@@ -274,6 +290,13 @@ export const workerEnvironmentSchema = serviceEnvironmentSchema
   .and(cryptographyEnvironmentSchema)
   .and(providerSwitchSchema)
   .superRefine((value, context) => {
+    if (value.HACKATHON_DEMO_MODE && value.MONNIFY_ENV !== "sandbox") {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Hackathon demo mode is restricted to Monnify sandbox deployments",
+      });
+    }
     if (
       value.PROVIDER_CALLS_ENABLED &&
       ([

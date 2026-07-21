@@ -1,6 +1,6 @@
 # Collage Implementation Status
 
-Last updated: 2026-07-19
+Last updated: 2026-07-21
 
 ## Render single-container free demo deployment
 
@@ -817,3 +817,36 @@ Status: implemented on 2026-07-19.
       before the manual-payment flow can open.
 - [x] The Mini App error state now identifies whether Collage details, cycle
       status, or member registration failed while preserving safe messaging.
+
+## Hackathon reminder console
+
+Status: implemented and statically verified on 2026-07-21.
+
+- [x] Added a single-file HTML control console with inline HTML, CSS, and
+      JavaScript and no stored credential.
+- [x] Added an opt-in API endpoint protected by a dedicated 32-character
+      minimum demo token; when disabled or unauthorized it is indistinguishable
+      from a missing route.
+- [x] A click reloads eligible cycles from PostgreSQL and queues ordinary
+      BullMQ reminder jobs, so the worker still filters pending provider
+      operations and owing members before sending one group notification.
+- [x] Payout simulation is not part of this console: the existing verified
+      contribution event immediately queues cycle readiness evaluation and an
+      eligible payout through the transactional outbox.
+- [x] Config build plus API lint, typecheck, and build pass.
+
+## Hackathon payout and active Telegram status presentation
+
+Status: implemented on 2026-07-21; full repository verification follows.
+
+- [x] Confirmed payout readiness and initiation already run immediately through
+      BullMQ after the final verified contribution; no payout control was added.
+- [x] Added an off-by-default Monnify-sandbox-only demo switch that settles
+      pending-like transfer results through the normal idempotent success path.
+- [x] Simulated settlement is explicitly identified in the append-only audit
+      log and is rejected when `MONNIFY_ENV=production`.
+- [x] Expanded active group status cards with ledger pot, schedule, current
+      cycle, recipient, payout, collection progress, and remaining-cycle data.
+- [x] Preserved the existing Telegram action button and used BigInt-safe money
+      formatting; Monnify's platform-wide wallet is not presented as a group
+      balance.

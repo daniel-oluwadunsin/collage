@@ -606,3 +606,29 @@ its opaque authorization ID so a reopened Mini App can safely resume polling.
   application code boundaries. Scale-to-zero, non-durable free queues, and
   expiring unbacked free PostgreSQL make this explicitly unsuitable for real
   money or production data.
+
+## D-053 — Demo reminders use the real durable worker path
+
+- Date: 2026-07-21
+- Decision: an explicitly enabled, token-protected demo endpoint queues one
+  normal reminder job for every collecting or overdue cycle with unpaid
+  contributions. The self-contained static console accepts the API origin and
+  token at runtime and does not persist either value. No payout trigger is
+  exposed because verified final payment already causes immediate cycle
+  evaluation and payout initiation through the outbox and worker.
+- Reason: hackathon timing needs an operator-controlled reminder without
+  bypassing source-of-truth checks, notification deduplication, or financial
+  state machines. Keeping payout automatic avoids a second money-moving path.
+
+## D-054 — Sandbox payout pending states may auto-settle only in hackathon mode
+
+- Date: 2026-07-21
+- Decision: `HACKATHON_DEMO_MODE=true` may be used only with
+  `MONNIFY_ENV=sandbox`. In that mode, a transfer result classified as pending,
+  in progress, or pending authorization is passed through the existing
+  idempotent payout-success ledger, cycle, outbox, notification, and next-cycle
+  path and is recorded in the audit log as simulated. The default remains
+  disabled and the configuration is rejected for Monnify production.
+- Reason: the hackathon merchant flow cannot complete payout MFA unattended.
+  A conspicuous sandbox-only switch supports the demo without changing live
+  provider classification or creating a second payout transition path.

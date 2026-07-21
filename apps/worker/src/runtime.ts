@@ -93,6 +93,7 @@ export const createWorkerRuntime = async (
       },
     },
     hashKey: Buffer.from(environment.APP_HASH_PEPPER, "utf8"),
+    simulatePendingPayoutSuccess: environment.HACKATHON_DEMO_MODE,
     maximumChargeAttempts: environment.WORKER_MAX_AUTOMATIC_CHARGE_ATTEMPTS,
     pendingPollMs: environment.WORKER_PENDING_POLL_SECONDS * 1_000,
     provider,

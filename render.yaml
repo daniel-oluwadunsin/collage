@@ -47,8 +47,14 @@ services:
         value: 2
       - key: PROVIDER_CALLS_ENABLED
         value: "true"
+      - key: DEMO_CONTROLS_ENABLED
+        value: "true"
+      - key: DEMO_CONTROL_TOKEN
+        sync: false
       - key: MONNIFY_ENV
         value: sandbox
+      - key: HACKATHON_DEMO_MODE
+        value: "true"
       - key: MONNIFY_BASE_URL
         value: https://sandbox.monnify.com
       - key: MONNIFY_API_KEY

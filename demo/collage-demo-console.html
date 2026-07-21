@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Collage demo controls</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #070b12;
+        color: #f7f9fc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: radial-gradient(circle at top, #122347, #070b12 52%);
+      }
+      main {
+        width: min(100%, 560px);
+        border: 1px solid #293754;
+        border-radius: 24px;
+        padding: 28px;
+        background: rgba(11, 18, 31, 0.94);
+        box-shadow: 0 24px 80px #0008;
+      }
+      .mark {
+        display: inline-block;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: #ffd85c;
+        color: #111827;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        font-size: 12px;
+      }
+      h1 {
+        margin: 18px 0 8px;
+        font-size: clamp(28px, 6vw, 42px);
+        line-height: 1;
+      }
+      p {
+        color: #aebbd0;
+        line-height: 1.55;
+      }
+      label {
+        display: grid;
+        gap: 7px;
+        margin-top: 18px;
+        color: #dce5f5;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      input {
+        width: 100%;
+        border: 1px solid #34425e;
+        border-radius: 12px;
+        padding: 13px 14px;
+        background: #0b1220;
+        color: white;
+        font: inherit;
+        outline: none;
+      }
+      input:focus {
+        border-color: #0357ee;
+        box-shadow: 0 0 0 3px #0357ee42;
+      }
+      button {
+        width: 100%;
+        margin-top: 22px;
+        border: 0;
+        border-radius: 14px;
+        padding: 15px 18px;
+        background: #0357ee;
+        color: white;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #1768f2;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      #result {
+        min-height: 50px;
+        margin-top: 16px;
+        padding: 13px 14px;
+        border-radius: 12px;
+        background: #101a2a;
+        color: #cbd7eb;
+        white-space: pre-wrap;
+      }
+      #result.ok {
+        border: 1px solid #36c98f;
+        color: #8ce5bd;
+      }
+      #result.error {
+        border: 1px solid #ef6270;
+        color: #ffadb5;
+      }
+      small {
+        display: block;
+        margin-top: 16px;
+        color: #7f8ca3;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="mark">COLLAGE · DEMO</span>
+      <h1>Demo controls</h1>
+      <p>
+        Queue one consolidated payment reminder for every active cycle that
+        still has owing members.
+      </p>
+      <form id="controls">
+        <label
+          >API origin<input
+            id="origin"
+            type="url"
+            required
+            placeholder="https://api.example.com"
+            value="https://collage-apiconf.onrender.com/api"
+        /></label>
+        <label
+          >Demo control token<input
+            id="token"
+            type="password"
+            required
+            minlength="32"
+            autocomplete="off"
+            placeholder="Paste the demo-only token"
+            value="b949261f466cd1f625afdc7316407c4b6af113600d3ce6d3e8e6b3dca1c4a617"
+        /></label>
+        <button id="trigger" type="submit">Send reminders now</button>
+      </form>
+      <div id="result" role="status" aria-live="polite">Ready.</div>
+      <small
+        >The token is kept only in this page's memory and is not stored. Payouts
+        are already evaluated automatically after the last verified
+        contribution, so this console does not override payout state.</small
+      >
+    </main>
+    <script>
+      const form = document.querySelector("#controls");
+      const button = document.querySelector("#trigger");
+      const result = document.querySelector("#result");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        result.className = "";
+        result.textContent = "Queueing reminders…";
+        try {
+          const origin = document
+            .querySelector("#origin")
+            .value.replace(/\/$/, "");
+          const response = await fetch(`${origin}/internal/demo/reminders`, {
+            method: "POST",
+            headers: {
+              "x-collage-demo-token": document.querySelector("#token").value,
+            },
+          });
+          const body = await response.json();
+          if (!response.ok || !body.success)
+            throw new Error(
+              body?.error?.message || `Request failed (${response.status})`,
+            );
+          result.className = "ok";
+          result.textContent = `Queued ${body.data.queuedReminders} reminder(s) across ${body.data.eligibleCycles} eligible cycle(s).`;
+        } catch (error) {
+          result.className = "error";
+          result.textContent =
+            error instanceof Error ? error.message : "The request failed.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

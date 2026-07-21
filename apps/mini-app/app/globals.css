@@ -276,9 +276,6 @@ a:focus-visible {
   border-radius: 0;
   box-shadow: var(--hard-shadow-md);
   padding: 18px 18px 17px;
-  position: sticky;
-  top: max(8px, var(--tg-viewport-content-safe-area-inset-top, 8px));
-  z-index: 8;
 }
 
 .eyebrow {

@@ -343,6 +343,8 @@ const manualRegistrationSchema = z.object({
 export class DatabaseWorkflowService implements WorkflowService {
   constructor(private readonly options: DatabaseWorkflowOptions) {}
 
+  async test(): Promise<void> {}
+
   async bootstrap(input: unknown): Promise<ApiData> {
     const value = bootstrapSchema.parse(input);
     let verified;
@@ -1099,7 +1101,11 @@ export class DatabaseWorkflowService implements WorkflowService {
         idempotencyKey: challenge.id,
         purpose: "registration-phone",
       });
-    } catch {
+    } catch (error) {
+      this.options.logger?.error(
+        { challengeId: challenge.id, error, otpProviderOperation: "send" },
+        "OTP provider send failed",
+      );
       await this.options.client.otpChallenge.update({
         where: { id: challenge.id },
         data: { consumedAt: new Date() },
@@ -1111,12 +1117,20 @@ export class DatabaseWorkflowService implements WorkflowService {
       );
     }
     if (delivery.outcome === "unknown") {
+      this.options.logger?.warn(
+        { challengeId: challenge.id, otpProviderOperation: "send" },
+        "OTP provider send outcome is unknown",
+      );
       throw new ApiError(
         503,
         "OTP_DELIVERY_UNKNOWN",
         "OTP delivery could not be confirmed. You may retry or use the code if it arrives.",
       );
     }
+    this.options.logger?.info(
+      { challengeId: challenge.id, otpProviderOperation: "send" },
+      "OTP message accepted by provider",
+    );
     return asData({
       accepted: true,
       expiresInSeconds: this.options.otpTtlSeconds,

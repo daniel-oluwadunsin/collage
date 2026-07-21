@@ -632,3 +632,15 @@ its opaque authorization ID so a reopened Mini App can safely resume polling.
 - Reason: the hackathon merchant flow cannot complete payout MFA unattended.
   A conspicuous sandbox-only switch supports the demo without changing live
   provider classification or creating a second payout transition path.
+
+## D-055 — SMSGate public cloud requires an explicit deployed-demo override
+
+- Date: 2026-07-21
+- Decision: production-mode processes continue to require private HTTPS
+  SMSGate by default. A hackathon deployment may explicitly set
+  `SMSGATE_ALLOW_PUBLIC_CLOUD_IN_PRODUCTION=true`; startup and OTP-send logs
+  expose only topology, operation, safe provider failure metadata, and the OTP
+  challenge ID. Credentials, phone numbers, and OTP content remain redacted.
+- Reason: Render correctly runs with `NODE_ENV=production`, while the demo uses
+  SMSGate public cloud. Making the exception explicit preserves the secure
+  default and makes a missing provider switch or failed cloud request visible.

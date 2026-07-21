@@ -64,7 +64,7 @@ services:
       - key: MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS
         value: "true"
       - key: OTP_PROVIDER
-        value: unconfigured
+        value: smsgate
       - key: OTP_TTL_SECONDS
         value: 600
       - key: SMSGATE_API_BASE_URL
@@ -73,14 +73,16 @@ services:
         value: cloud
       - key: SMSGATE_AUTH_MODE
         value: jwt
+      - key: SMSGATE_ALLOW_PUBLIC_CLOUD_IN_PRODUCTION
+        value: "true"
       - key: SMSGATE_USERNAME
-        value: "PEIUXS"
+        sync: false
       - key: SMSGATE_PASSWORD
-        value: "4ushxvkdlpiqa_"
+        sync: false
       - key: SMSGATE_SIM_NUMBER
         value: 1
       - key: SMSGATE_DEVICE_ID
-        value: "mYm2t9ttuVdi-74lxVxbL"
+        sync: false
       - key: SMSGATE_PRIORITY
         value: 100
       - key: SMSGATE_REQUEST_TIMEOUT_MS

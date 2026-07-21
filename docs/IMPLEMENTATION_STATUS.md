@@ -850,3 +850,15 @@ Status: implemented on 2026-07-21; full repository verification follows.
 - [x] Preserved the existing Telegram action button and used BigInt-safe money
       formatting; Monnify's platform-wide wallet is not presented as a group
       balance.
+
+## Deployed SMSGate diagnostics
+
+Status: implemented on 2026-07-21.
+
+- [x] Render selects `OTP_PROVIDER=smsgate`; credentials and the optional device
+      ID are dashboard-managed secrets rather than committed Blueprint values.
+- [x] Added an explicit hackathon-only public-cloud override while retaining the
+      private-HTTPS production default.
+- [x] API startup logs show the selected provider and non-secret topology; OTP
+      attempts log accepted, unknown, or failed outcomes without phone numbers,
+      OTPs, or credentials.

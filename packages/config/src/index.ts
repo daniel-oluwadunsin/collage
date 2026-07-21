@@ -50,6 +50,10 @@ const smsGateEnvironmentSchema = z.object({
     .enum(["cloud", "local", "private"])
     .default("cloud"),
   SMSGATE_AUTH_MODE: z.enum(["basic", "jwt"]).default("jwt"),
+  SMSGATE_ALLOW_PUBLIC_CLOUD_IN_PRODUCTION: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   SMSGATE_USERNAME: z.string().default(""),
   SMSGATE_PASSWORD: z.string().default(""),
   SMSGATE_DEVICE_ID: z.preprocess(
@@ -165,7 +169,8 @@ export const apiEnvironmentSchema = serviceEnvironmentSchema
     if (
       value.NODE_ENV === "production" &&
       value.OTP_PROVIDER === "smsgate" &&
-      value.SMSGATE_DEPLOYMENT_MODE !== "private"
+      value.SMSGATE_DEPLOYMENT_MODE !== "private" &&
+      !value.SMSGATE_ALLOW_PUBLIC_CLOUD_IN_PRODUCTION
     ) {
       context.addIssue({
         code: "custom",

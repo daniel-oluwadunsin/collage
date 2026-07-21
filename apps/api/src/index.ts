@@ -37,6 +37,18 @@ import { MonnifyWebhookIngress } from "./webhook-ingress.js";
 
 const environment = parseEnvironment(apiEnvironmentSchema, process.env);
 const logger = createLogger("api", { level: environment.LOG_LEVEL });
+logger.info(
+  {
+    authenticationMode: environment.SMSGATE_AUTH_MODE,
+    baseUrlHost: new URL(environment.SMSGATE_API_BASE_URL).host,
+    deploymentMode: environment.SMSGATE_DEPLOYMENT_MODE,
+    devicePinned: environment.SMSGATE_DEVICE_ID !== undefined,
+    otpProvider: environment.OTP_PROVIDER,
+    publicCloudProductionOverride:
+      environment.SMSGATE_ALLOW_PUBLIC_CLOUD_IN_PRODUCTION,
+  },
+  "OTP provider configuration loaded",
+);
 const client = createPrismaClient(environment.DATABASE_URL);
 const redis = createRedisConnection(environment.REDIS_URL);
 const reminderQueue = createQueue("reminders", redis);

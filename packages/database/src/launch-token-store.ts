@@ -21,6 +21,9 @@ export class PrismaLaunchTokenStore implements LaunchTokenStore {
         ...(token.collageId === undefined
           ? {}
           : { collageId: token.collageId }),
+        ...(token.resourceId === undefined
+          ? {}
+          : { resourceId: token.resourceId }),
         ...(token.chatId === undefined ? {} : { chatId: token.chatId }),
       },
     });
@@ -48,6 +51,7 @@ export class PrismaLaunchTokenStore implements LaunchTokenStore {
         action: token.action,
         ...(token.userId === null ? {} : { userId: token.userId }),
         ...(token.collageId === null ? {} : { collageId: token.collageId }),
+        ...(token.resourceId === null ? {} : { resourceId: token.resourceId }),
         ...(token.chatId === null ? {} : { chatId: token.chatId }),
       };
     });

@@ -709,6 +709,7 @@ model LaunchToken {
   tokenHash  String           @unique @db.Char(64)
   userId     String?          @db.Uuid
   collageId  String?          @db.Uuid
+  resourceId String?          @db.Uuid
   chatId     String?          @db.Uuid
   action     String           @db.VarChar(64)
   state      LaunchTokenState @default(ACTIVE)
@@ -721,5 +722,6 @@ model LaunchToken {
   chat       TelegramChat?    @relation(fields: [chatId], references: [id], onDelete: Restrict)
 
   @@index([expiresAt, state])
+  @@index([resourceId, action])
   @@map("launch_tokens")
 }

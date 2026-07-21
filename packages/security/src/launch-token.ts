@@ -6,6 +6,7 @@ export interface LaunchTokenBinding {
   readonly action: string;
   readonly chatId?: string;
   readonly collageId?: string;
+  readonly resourceId?: string;
   readonly userId?: string;
 }
 
@@ -39,6 +40,7 @@ export class LaunchTokenService {
     if (
       binding.userId === undefined &&
       binding.collageId === undefined &&
+      binding.resourceId === undefined &&
       binding.chatId === undefined
     ) {
       throw new Error("Launch tokens require at least one binding");

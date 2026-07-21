@@ -2,6 +2,74 @@
 
 Last updated: 2026-07-21
 
+## Groq-powered Collage assistant
+
+Status: implementation complete; verification evidence is recorded below.
+
+- [x] Added backend-owned `@collage/assistant` package using Groq only for one
+      natural-language-to-tool selection request.
+- [x] Added deterministic family pre-routing, strict tool schemas, unknown and
+      extra-argument rejection, trusted mention/reply placeholders, unsafe
+      request filtering, and no AI retry/fallback behavior.
+- [x] Added signed `POST /internal/assistant/query`; API resolves current chat,
+      fresh Telegram membership, Collage membership, actor role, and target.
+- [x] Added personal, member, group, cycle, rule, and safe Mini App action-link
+      tools backed by database/domain source-of-truth projections.
+- [x] Pot values come only from the append-only Collage ledger. Money remains
+      BigInt minor units until existing display formatting.
+- [x] Added per-user and per-chat Redis limits, maximum input length, safe
+      structured logs, and action-link audit records.
+- [x] Action tokens are single-use and bind user, Telegram chat, Collage,
+      action, and relevant cycle/payout where applicable; ordinary API checks
+      still run before any provider action.
+- [x] Bot supports `/ask`, explicit mentions, and question replies; ignores
+      ordinary group conversation and replies to the exact original message
+      while preserving forum topics.
+- [x] Anonymous personal questions, ambiguous/unresolved people, outsiders,
+      sensitive disclosures, permission bypasses, and malformed Groq output
+      fail closed with deterministic responses.
+- [x] Groq configuration is API-only; the combined Render supervisor strips it
+      from bot, worker, migration, and Mini App child environments.
+- [x] Assistant activation defaults to off, including Render, so deploying the
+      code before provisioning Groq cannot prevent the existing API from
+      starting or change current bot/payment behavior.
+- [x] Backward-compatible feature-gate verification passed six assertions: an
+      existing environment with no Groq variables parses with the assistant
+      disabled, enabling without a key fails closed, and fully configured
+      enablement selects the intended model. The temporary test was deleted.
+- [x] Selected `openai/gpt-oss-20b` through `GROQ_MODEL` after verifying current
+      official support for local tool calling and low reasoning effort; the
+      model remains operator-overridable without an application code change.
+- [x] Model-selection regression verification passed 20 focused assertions:
+      six representative intents exposed the expected tool, the configured
+      model and low reasoning effort reached the Groq request, required
+      single-tool behavior remained enforced, and a rate-limit response was
+      not retried. The temporary test file was deleted after verification.
+- [x] Removed a literal Groq key from `.env.example`; the exposed key must be
+      revoked and replaced with an operator-managed API secret.
+- [x] Focused assistant, bot, and API verification passed 110 assertions across
+      deterministic routing, schema rejection, authorization, privacy
+      placeholders, HTML escaping, exact one-call/no-retry Groq behavior,
+      Telegram commands/mentions/replies/topics/buttons, and internal endpoint
+      authentication. The temporary test files were deleted after verification
+      as required by this repository.
+- [x] `pnpm install --frozen-lockfile --offline`, Prisma client generation,
+      format, lint, strict typecheck, production build, and development plus
+      production Compose configuration validation passed.
+- [x] Fresh local PostgreSQL migration deployment passed against the Compose
+      database: all 12 migrations applied, including assistant action-token
+      resource binding.
+- [x] Successfully loaded the idempotent, non-production Collage fixture into
+      the fresh local database during local verification.
+- [ ] Full Docker Compose application smoke testing and Playwright remain
+      pending; PostgreSQL and Redis are healthy, but application services still
+      require a populated local `.env`.
+- [ ] Live Groq credential/model smoke test requires a new operator-owned key;
+      no usable key is present locally, and the previously exposed key must not
+      be reused.
+- [ ] Real Telegram Android/iOS/Desktop reply and topic validation requires an
+      operator bot and devices.
+
 ## Mini App registered-member count correction
 
 Status: implemented on 2026-07-21.

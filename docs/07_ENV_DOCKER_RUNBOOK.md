@@ -86,6 +86,16 @@ SMSGATE_TOKEN_TTL_SECONDS=3600
 
 SWAGGER_ENABLED=true
 SWAGGER_PATH=/docs
+
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-20b
+GROQ_TIMEOUT_MS=8000
+GROQ_REASONING_EFFORT=low
+GROQ_MAX_TOOL_CALLS=1
+ASSISTANT_ENABLED=true
+ASSISTANT_MAX_MESSAGE_LENGTH=1000
+ASSISTANT_USER_RATE_LIMIT_PER_MINUTE=5
+ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE=20
 ```
 
 Production rules:
@@ -97,6 +107,27 @@ Production rules:
 - protect/disable Swagger if desired;
 - use production Monnify URL;
 - load secrets from a secret manager.
+- expose `GROQ_API_KEY` only to the API process. The Render supervisor removes
+  all Groq/assistant variables from bot, worker, migration, and Mini App child
+  environments.
+
+Groq assistant values:
+
+| Variable                               | Owner / secrecy            | Meaning                                                                                                                                                    |
+| -------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GROQ_API_KEY`                         | API / **secret**           | Groq server credential; create it in the Groq console and never expose it to Telegram or browser code.                                                     |
+| `GROQ_MODEL`                           | API / public configuration | Selected deployment model: `openai/gpt-oss-20b`. It supports local tool calling and low reasoning effort; operators can override it without changing code. |
+| `GROQ_TIMEOUT_MS`                      | API / public policy        | Hard timeout for the single Groq request; default `8000`. A timeout is not retried.                                                                        |
+| `GROQ_REASONING_EFFORT`                | API / public policy        | Provider reasoning effort; default `low`. Groq documents model-specific support.                                                                           |
+| `GROQ_MAX_TOOL_CALLS`                  | API / invariant            | Must be `1`; startup rejects any other value.                                                                                                              |
+| `ASSISTANT_ENABLED`                    | API / feature switch       | Enables assistant routing. When true, key and model are required.                                                                                          |
+| `ASSISTANT_MAX_MESSAGE_LENGTH`         | API / abuse control        | Maximum sanitized question length; default `1000`.                                                                                                         |
+| `ASSISTANT_USER_RATE_LIMIT_PER_MINUTE` | API / abuse control        | Redis-backed per-sender limit; default `5`.                                                                                                                |
+| `ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE` | API / abuse control        | Redis-backed per-chat limit; default `20`.                                                                                                                 |
+
+The assistant has no AI retry, fallback provider, retry queue, or tool-result
+follow-up request. Set `ASSISTANT_ENABLED=false` for local/Docker smoke tests
+when Groq credentials are unavailable.
 
 SMSGate deployment notes:
 

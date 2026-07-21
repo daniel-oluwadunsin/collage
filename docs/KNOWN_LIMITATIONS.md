@@ -20,3 +20,9 @@
 - Automated tests were removed after a successful verification run at the
   product owner's request. Future behavior changes therefore require restoring
   equivalent coverage before claiming regression safety.
+- The assistant requires operator-selected Groq model access. Tool calling and
+  `reasoning_effort` support are model-specific; an incompatible or retired
+  model fails closed with the deterministic unavailable response.
+- The assistant intentionally has no conversation memory, AI retry, fallback
+  model/provider, direct financial mutation, or direct access to provider and
+  database credentials.

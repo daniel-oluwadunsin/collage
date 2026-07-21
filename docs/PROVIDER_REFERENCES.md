@@ -1,5 +1,30 @@
 # Provider and Platform References
 
+Re-consulted on 2026-07-21 for the Groq-powered Collage assistant:
+
+- [Groq — OpenAI GPT-OSS 20B model](https://console.groq.com/docs/model/openai-gpt-oss-20b) —
+  confirms the selected `openai/gpt-oss-20b` deployment model supports local
+  tool use, function calling, reasoning, and low/medium/high reasoning modes.
+  It is used only as the one-shot intent router and remains configurable.
+- [Groq — Local Tool Calling](https://console.groq.com/docs/tool-use/local-tool-calling) —
+  local functions are defined by the application and returned in
+  `message.tool_calls`; arguments arrive as a JSON string and malformed tool
+  generation can produce an HTTP 400. Collage validates every selected call
+  with strict Zod and never sends tool results back for final wording.
+- [Groq — Chat Completions API](https://console.groq.com/docs/api-reference) —
+  confirms the OpenAI-compatible chat-completions endpoint,
+  `tool_choice`, `parallel_tool_calls`, model-specific `reasoning_effort`, and
+  completion-token controls. Collage sets required tool choice, disables
+  parallel tool calls, caps output, performs one request, and implements no
+  provider retry.
+- [Telegram Bot API — MessageEntity](https://core.telegram.org/bots/api#messageentity) —
+  entity offsets and lengths are UTF-16 code units; `text_mention` carries the
+  referenced user. The bot parses the untouched Telegram message before
+  stripping its own mention.
+- [Telegram Bot API — ReplyParameters](https://core.telegram.org/bots/api#replyparameters) —
+  confirms `message_id` and `allow_sending_without_reply`; assistant answers
+  retain the original forum `message_thread_id` as well.
+
 Consulted on: 2026-07-18
 
 Re-consulted on 2026-07-19 after Monnify rejected a date-only direct-debit

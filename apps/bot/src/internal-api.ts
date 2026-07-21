@@ -1,4 +1,8 @@
 import {
+  assistantQueryRequestSchema,
+  assistantQueryResponseSchema,
+  type AssistantQueryRequest,
+  type AssistantQueryResponse,
   telegramStatusCardSchema,
   type TelegramStatusCard,
 } from "@collage/contracts";
@@ -23,8 +27,10 @@ const membershipResultSchema = z.object({
 
 export interface TelegramPerson {
   readonly firstName: string;
+  readonly lastName?: string;
   readonly telegramChatId: string;
   readonly telegramUserId: string;
+  readonly username?: string;
   readonly role:
     | "MEMBER"
     | "ADMINISTRATOR"
@@ -36,6 +42,7 @@ export interface TelegramPerson {
 }
 
 export interface InternalTelegramApi {
+  assistantQuery(input: AssistantQueryRequest): Promise<AssistantQueryResponse>;
   upsertChat(input: {
     readonly telegramChatId: string;
     readonly title: string;
@@ -117,6 +124,15 @@ export class SignedInternalTelegramClient implements InternalTelegramApi {
     input: Parameters<InternalTelegramApi["upsertChat"]>[0],
   ): Promise<void> {
     await this.#request("/internal/telegram/chats/upsert", "POST", input);
+  }
+
+  async assistantQuery(
+    input: AssistantQueryRequest,
+  ): Promise<AssistantQueryResponse> {
+    const validated = assistantQueryRequestSchema.parse(input);
+    return assistantQueryResponseSchema.parse(
+      await this.#request("/internal/assistant/query", "POST", validated),
+    );
   }
 
   async getStatusCard(

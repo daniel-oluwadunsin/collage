@@ -19,6 +19,7 @@ collage/
 │   ├── logger/
 │   ├── monnify/
 │   ├── queue/
+│   ├── assistant/
 │   ├── security/
 │   ├── smsgate/
 │   ├── telegram/
@@ -295,6 +296,20 @@ Pino configuration with:
 
 Shared shadcn-based primitives, theme tokens, and asynchronous-state components. Business feature components remain inside `apps/mini-app`.
 
+### 3.12 `packages/assistant`
+
+- Groq OpenAI-compatible client with one request and no retry;
+- deterministic lexical tool-family pre-routing;
+- strict Zod tool-call schemas and central tool authorization;
+- trusted-placeholder message sanitization;
+- deterministic Telegram HTML result formatting;
+- no Prisma, Redis, Monnify, Telegram Bot API, or money-movement access.
+
+The API owns context resolution and approved tool execution. Groq receives only
+the current sanitized question and three to five relevant local-tool schemas;
+it receives no chat history, database identifiers, Telegram identifiers,
+financial records, or tool results. The bot never calls Groq.
+
 ## 4. Communication model
 
 ### 4.1 Mini App to API
@@ -335,6 +350,25 @@ Preferred model:
 - delivery result is persisted.
 
 This makes Telegram rate-limit retries and failures explicit.
+
+### 4.5 Telegram assistant query
+
+```text
+Telegram message -> bot extracts trusted sender/entities/thread
+  -> signed POST /internal/assistant/query
+  -> API resolves fresh chat membership and current Collage
+  -> deterministic family pre-router
+  -> one Groq tool-selection request
+  -> Zod validation and backend authorization
+  -> one read/action-link tool using source-of-truth services/data
+  -> deterministic HTML formatter
+  -> bot replies with ReplyParameters to the original message
+```
+
+Read tools do not mutate financial state. Action tools issue only short-lived,
+single-use Mini App tokens bound to user, chat, Collage, action, and the current
+cycle or payout when applicable. The Mini App and ordinary API workflow repeat
+authorization and financial-state checks before any provider initialization.
 
 ## 5. Database model
 

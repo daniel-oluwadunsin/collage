@@ -79,7 +79,43 @@ export const apiEnvironmentSchema = serviceEnvironmentSchema
     CORS_ALLOWED_ORIGINS: z.string().min(1),
     MINI_APP_PUBLIC_URL: urlSchema,
     TELEGRAM_BOT_TOKEN: z.string().min(10),
+    TELEGRAM_BOT_USERNAME: z.string().regex(/^@?[A-Za-z0-9_]{5,64}$/u),
+    TELEGRAM_MINI_APP_SHORT_NAME: z.string().regex(/^[A-Za-z0-9_]{1,64}$/u),
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(300),
+    GROQ_API_KEY: z.string().default(""),
+    GROQ_MODEL: z.string().trim().default(""),
+    GROQ_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(30_000)
+      .default(8_000),
+    GROQ_REASONING_EFFORT: z
+      .enum(["none", "low", "medium", "high"])
+      .default("low"),
+    GROQ_MAX_TOOL_CALLS: z.coerce.number().int().min(1).max(1).default(1),
+    ASSISTANT_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    ASSISTANT_MAX_MESSAGE_LENGTH: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(4_096)
+      .default(1_000),
+    ASSISTANT_USER_RATE_LIMIT_PER_MINUTE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(5),
+    ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1_000)
+      .default(20),
     MONNIFY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
     MONNIFY_BASE_URL: urlSchema,
     MONNIFY_API_KEY: z.string(),
@@ -105,6 +141,16 @@ export const apiEnvironmentSchema = serviceEnvironmentSchema
   .and(providerSwitchSchema)
   .and(smsGateEnvironmentSchema)
   .superRefine((value, context) => {
+    if (
+      value.ASSISTANT_ENABLED &&
+      (value.GROQ_API_KEY.length === 0 || value.GROQ_MODEL.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "GROQ_API_KEY and GROQ_MODEL are required when the assistant is enabled",
+      });
+    }
     if (value.DEMO_CONTROLS_ENABLED && value.DEMO_CONTROL_TOKEN.length < 32) {
       context.addIssue({
         code: "custom",

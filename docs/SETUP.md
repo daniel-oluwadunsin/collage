@@ -30,11 +30,33 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:4000/v1
 
 Start all workspace apps with `pnpm dev`, or use `docker compose up --build`.
 
+## Groq assistant
+
+1. Create a Groq API key in the Groq console.
+2. Use the configured `openai/gpt-oss-20b` model. It supports local tool
+   calling and `low` reasoning effort; override `GROQ_MODEL` only after testing
+   another currently enabled model.
+3. Set `GROQ_API_KEY`, `GROQ_MODEL`, and the assistant policy variables in the
+   API environment only.
+4. Keep `GROQ_MAX_TOOL_CALLS=1`; use `ASSISTANT_ENABLED=false` when developing
+   without Groq.
+5. In Telegram, use `/ask <question>`, explicitly mention the bot, or reply to
+   a bot message with a question.
+
+No Groq credential belongs in `apps/bot`, `apps/mini-app`, a `NEXT_PUBLIC_*`
+variable, or Telegram configuration. Provider timeout, rate limit, malformed
+tool output, and other failures return one deterministic unavailable message
+without retry.
+
+See [`docs/ASSISTANT.md`](./ASSISTANT.md) for the complete tool catalogue,
+permission matrix, identity rules, and failure behavior.
+
 ## Environment ownership
 
 - Shared server: `NODE_ENV`, `LOG_LEVEL`, `DATABASE_URL`, `REDIS_URL`, public
   URLs, encryption/hash/internal-service secrets, `PROVIDER_CALLS_ENABLED`.
 - API: `API_PORT`, proxy/CORS/Swagger/session policy, Telegram init-data age,
+  all `GROQ_*` and `ASSISTANT_*` values,
   Monnify credentials and webhook policy, OTP/SMSGate configuration, card setup
   policy.
 - Bot: `BOT_PORT`, Telegram bot/webhook/Mini App values, internal API URL and

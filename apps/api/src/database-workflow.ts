@@ -2715,8 +2715,10 @@ export class DatabaseWorkflowService implements WorkflowService {
     const value = z
       .object({
         firstName: z.string().min(1).max(128).default("Telegram user"),
+        lastName: z.string().min(1).max(128).optional(),
         telegramChatId: z.string(),
         telegramUserId: z.string(),
+        username: z.string().min(1).max(64).optional(),
         role: z
           .enum([
             "MEMBER",
@@ -2739,9 +2741,15 @@ export class DatabaseWorkflowService implements WorkflowService {
         create: {
           telegramUserId: value.telegramUserId,
           firstName: value.firstName,
+          lastName: value.lastName ?? null,
+          username: value.username ?? null,
           user: { create: {} },
         },
-        update: { firstName: value.firstName },
+        update: {
+          firstName: value.firstName,
+          lastName: value.lastName ?? null,
+          username: value.username ?? null,
+        },
       }),
     ]);
     if (chat === null)

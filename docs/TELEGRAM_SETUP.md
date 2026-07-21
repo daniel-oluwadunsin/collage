@@ -1,7 +1,7 @@
 # Telegram Setup
 
 1. Create the bot with BotFather and record the bot token in a secret manager.
-2. Configure `/collage`, `/status`, `/rules`, and `/help` commands.
+2. Configure `/collage`, `/status`, `/rules`, `/ask`, and `/help` commands.
 3. Create the Mini App short name and attach the production HTTPS Mini App URL.
 4. Set `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINI_APP_SHORT_NAME`, and the public
    webhook URL.
@@ -26,3 +26,14 @@ https://t.me/<bot>/<short-name>?startapp=<opaque-token>&mode=compact
 Validate on real Android, iOS, and Desktop Telegram clients: host theme changes,
 safe areas, compact/fullscreen behavior, keyboard navigation, group-admin
 checks, pinned-message create/edit, and provider-return navigation.
+
+Assistant invocation is limited to `/ask`, an explicit `@bot` mention, or a
+question sent as a reply to a bot message. The bot removes its command/mention,
+parses Telegram entities using their UTF-16 offsets, and sends trusted sender,
+mention, reply-target, message, and topic context to the API. The final send
+uses `reply_parameters.message_id` with
+`allow_sending_without_reply=true` and preserves `message_thread_id`.
+
+“I”, “me”, and “my” always mean `message.from.id`. Anonymous administrator
+messages may ask limited group-level questions, but personal questions are
+refused because no individual identity can be verified.

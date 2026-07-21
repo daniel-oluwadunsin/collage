@@ -41,6 +41,24 @@ services:
         value: 3600
       - key: BOT_INTERNAL_REQUEST_TIMEOUT_MS
         value: 5000
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: GROQ_TIMEOUT_MS
+        value: 8000
+      - key: GROQ_REASONING_EFFORT
+        value: low
+      - key: GROQ_MAX_TOOL_CALLS
+        value: 1
+      - key: ASSISTANT_ENABLED
+        value: "false"
+      - key: ASSISTANT_MAX_MESSAGE_LENGTH
+        value: 1000
+      - key: ASSISTANT_USER_RATE_LIMIT_PER_MINUTE
+        value: 5
+      - key: ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE
+        value: 20
       - key: TELEGRAM_NOTIFICATION_CONCURRENCY
         value: 4
       - key: TELEGRAM_RATE_LIMIT_MAX_RETRIES

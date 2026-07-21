@@ -5,6 +5,20 @@ const workspace = "/workspace";
 const children = new Map();
 let shuttingDown = false;
 
+const environmentWithoutGroq = () => {
+  const environment = { ...process.env };
+  delete environment.GROQ_API_KEY;
+  delete environment.GROQ_MODEL;
+  delete environment.GROQ_TIMEOUT_MS;
+  delete environment.GROQ_REASONING_EFFORT;
+  delete environment.GROQ_MAX_TOOL_CALLS;
+  delete environment.ASSISTANT_ENABLED;
+  delete environment.ASSISTANT_MAX_MESSAGE_LENGTH;
+  delete environment.ASSISTANT_USER_RATE_LIMIT_PER_MINUTE;
+  delete environment.ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE;
+  return environment;
+};
+
 const runMigration = () =>
   new Promise((resolve, reject) => {
     const migration = spawn(
@@ -12,7 +26,7 @@ const runMigration = () =>
       ["node_modules/prisma/build/index.js", "migrate", "deploy"],
       {
         cwd: `${workspace}/packages/database`,
-        env: process.env,
+        env: environmentWithoutGroq(),
         stdio: "inherit",
       },
     );
@@ -34,6 +48,7 @@ const services = [
     command: "node",
     args: ["apps/api/dist/index.js"],
     env: { API_PORT: "4000" },
+    receivesGroqConfiguration: true,
   },
   {
     name: "bot",
@@ -94,7 +109,12 @@ try {
   for (const service of services) {
     const child = spawn(service.command, service.args, {
       cwd: service.cwd ?? workspace,
-      env: { ...process.env, ...service.env },
+      env: {
+        ...(service.receivesGroqConfiguration
+          ? process.env
+          : environmentWithoutGroq()),
+        ...service.env,
+      },
       stdio: "inherit",
     });
     children.set(service.name, child);

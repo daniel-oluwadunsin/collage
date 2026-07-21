@@ -1,5 +1,9 @@
 # Telegram Setup
 
+The Main Mini App URL configured in BotFather is the deployed `/mini-app`
+route, for example `https://collage-apiconf.onrender.com/mini-app`. The origin
+root is the public Collage landing page.
+
 1. Create the bot with BotFather and record the bot token in a secret manager.
 2. Configure `/collage`, `/status`, `/rules`, `/ask`, and `/help` commands.
 3. Create the Mini App short name and attach the production HTTPS Mini App URL.

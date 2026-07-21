@@ -3,8 +3,8 @@
 import { closeMiniApp } from "@telegram-apps/sdk-react";
 import { CheckCircle2 } from "lucide-react";
 
-import { AppProviders } from "../../components/providers";
-import { AppShell, Button, StatePage } from "../../components/ui";
+import { AppProviders } from "../../../components/providers";
+import { AppShell, Button, StatePage } from "../../../components/ui";
 
 export default function PaymentReturnPage() {
   const close = (): void => {

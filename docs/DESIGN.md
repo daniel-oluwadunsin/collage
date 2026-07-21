@@ -296,3 +296,19 @@ Mini App:
 
 The resulting system should feel bold and physical, but still precise enough
 to withstand a payment dispute review.
+
+## 13. Public landing-page boundary
+
+The public marketing page at `/` may use longer ambient motion, parallax,
+smooth scrolling, and a custom pointer because it contains no financial state
+or transactional action. It still uses the fixed Collage colors, flat fills,
+solid borders, hard shadows, square structure, light/dark themes, accessible
+focus states, and reduced-motion fallback.
+
+The animated hero signal is code-native rather than a downloaded Lottie file:
+connected contribution nodes, floating ledger tiles, particles, and orbit
+lines represent a group staying coordinated. No gradient, blur, glass surface,
+or external animation asset is introduced. These marketing allowances do not
+apply beneath `/mini-app`, where
+the short mechanical motion rules and full provider-state clarity remain
+binding.

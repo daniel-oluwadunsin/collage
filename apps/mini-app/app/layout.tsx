@@ -5,9 +5,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Collage",
+  title: "Collage — Contributions, kept in rhythm",
   description:
-    "Telegram-native Ajo registration, contributions, and payout operations.",
+    "An AI-powered financial operations companion for transparent group contributions on Telegram.",
 };
 
 export const viewport: Viewport = {

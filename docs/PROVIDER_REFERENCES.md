@@ -323,3 +323,12 @@ Reconsulted on 2026-07-21:
   `WebApp.close()` bridge emits the Mini App close event; Collage uses the SDK
   bridge first and requests return to the app that opened an external deep
   link. A bot `t.me` link is retained only as a regular-browser fallback.
+
+## Public landing and `/mini-app` route split
+
+Reconsulted on 2026-07-21:
+
+- [Telegram Mini Apps](https://core.telegram.org/bots/webapps) — Main Mini Apps
+  are configured through BotFather and Telegram passes `startapp` context to
+  the configured Mini App URL. Collage therefore registers the canonical
+  deployed `/mini-app` URL while retaining `/` as the public website.

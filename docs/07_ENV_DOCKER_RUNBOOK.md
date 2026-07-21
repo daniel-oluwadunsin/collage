@@ -33,7 +33,7 @@ PROVIDER_CALLS_ENABLED=false
 
 PUBLIC_APP_URL=https://example.ng
 API_PUBLIC_URL=https://api.example.ng
-MINI_APP_PUBLIC_URL=https://app.example.ng
+MINI_APP_PUBLIC_URL=https://app.example.ng/mini-app
 ```
 
 `APP_ENCRYPTION_KEY_BASE64` must decode to exactly 32 bytes.
@@ -276,7 +276,7 @@ must never contain credentials.
 | --------------------- | -------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PUBLIC_APP_URL`      | Reserved / public    | Intended umbrella product URL. The current runtime does not read it.                          | Use the canonical public Collage website URL if retained for deployment metadata; otherwise leave blank.                                    |
 | `API_PUBLIC_URL`      | API, worker / public | Browser/provider-reachable API origin without `/v1`. Used when creating public callback URLs. | Use the HTTPS API domain configured in DNS/reverse proxy, for example `https://api.example.ng`.                                             |
-| `MINI_APP_PUBLIC_URL` | API / public         | Canonical HTTPS origin of the Telegram Mini App.                                              | Use the deployed Next.js URL registered with BotFather, without a trailing route.                                                           |
+| `MINI_APP_PUBLIC_URL` | API / public         | Canonical HTTPS URL of the Telegram Mini App.                                                 | Use the deployed Next.js `/mini-app` URL registered with BotFather, without a trailing slash.                                               |
 | `INTERNAL_API_URL`    | bot / internal       | Base URL used by the bot to call the API over the private network.                            | In Compose use `http://api:4000`; outside Compose use the API’s private service-discovery URL. Never point it at an untrusted public proxy. |
 | `API_PORT`            | API / public         | API listen port inside its process/container.                                                 | Keep `4000` unless the platform requires another port. Compose currently fixes the container value to `4000`.                               |
 | `BOT_PORT`            | bot / public         | Bot health/webhook HTTP listen port.                                                          | Keep `4001` unless the platform requires another port.                                                                                      |
@@ -575,7 +575,8 @@ Public routes:
 
 | Route                                            | Destination                         |
 | ------------------------------------------------ | ----------------------------------- |
-| `/`                                              | Mini App on internal port `3000`    |
+| `/`                                              | Public landing page on port `3000`  |
+| `/mini-app` and `/mini-app/*`                    | Telegram Mini App on port `3000`    |
 | `/api/v1/*`                                      | API `/v1/*` on internal port `4000` |
 | `/api/webhooks/monnify`                          | API `/webhooks/monnify`             |
 | `/telegram/webhook`                              | bot on internal port `4001`         |
@@ -617,8 +618,10 @@ is forwarded to API, bot, worker, and Mini App.
 After deployment:
 
 1. Open `https://collage-apiconf.onrender.com/health/ready` and wait for `200`.
-2. Open the Mini App origin and confirm the design shell loads.
-3. In BotFather, set the Mini App URL to the canonical demo origin.
+2. Open the canonical origin and confirm the landing page loads, then open
+   `/mini-app` and confirm the Telegram design shell loads.
+3. In BotFather, set the Main Mini App URL to
+   `https://collage-apiconf.onrender.com/mini-app`.
 4. Confirm Telegram webhook configuration points to
    `https://collage-apiconf.onrender.com/telegram/webhook`.
 5. If Monnify sandbox is intentionally enabled later, configure its webhook as

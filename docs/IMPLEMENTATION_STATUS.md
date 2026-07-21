@@ -2,6 +2,42 @@
 
 Last updated: 2026-07-21
 
+## Public landing page and Mini App route split
+
+Status: implemented on 2026-07-21; verification evidence is recorded below.
+
+- [x] Replaced the public root with a responsive hero, four-step sticky story,
+      Telegram CTA, and oversized low-contrast `COLLAGE` footer wordmark.
+- [x] Described Collage as an AI-powered financial operations companion while
+      keeping money movement and group approval boundaries explicit.
+- [x] Added a code-native animated contribution network, GSAP scroll choreography,
+      Lenis smooth scrolling, Framer Motion nodes/tiles, parallax, and a desktop
+      custom cursor with reduced-motion and coarse-pointer fallbacks.
+- [x] Preserved Collage Yellow `#FFD85C`, Collage Blue `#0357EE`, flat fills,
+      hard borders/shadows, accessible focus, and first-class light/dark mode.
+- [x] Moved the Telegram experience and provider return route to `/mini-app`
+      and `/mini-app/payment-return` respectively.
+- [x] Updated the Render and Compose Mini App base URL only where required;
+      API, webhook, health, and unrelated Render configuration are unchanged.
+- [x] Consulted Telegram's official Mini Apps documentation for Main Mini App
+      and BotFather URL configuration.
+
+### Verification evidence
+
+| Evidence                                | Result                                                                                    |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm format:check`                     | Pass                                                                                      |
+| `pnpm lint`                             | Pass — 28 Turbo tasks                                                                     |
+| `pnpm typecheck`                        | Pass — 28 Turbo tasks                                                                     |
+| `pnpm --filter @collage/mini-app build` | Pass — `/`, `/mini-app`, and `/mini-app/payment-return` generated                         |
+| `docker compose config --quiet`         | Pass                                                                                      |
+| Browser QA at 1440×900 and 390×844      | Pass — light/dark theme, zero horizontal overflow, four steps, CTA links, and route split |
+| Animated-background audit               | Pass — one contribution network, two desktop ledger tiles, zero beat/equalizer elements   |
+
+The product-owner-mandated repository test deletion remains in effect, so no
+unit or Playwright suite exists to execute for this change. Static, production
+build, Compose, and direct browser evidence are recorded instead.
+
 ## Mini App cycle-history response correction
 
 Status: implemented on 2026-07-21.

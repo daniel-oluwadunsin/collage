@@ -55,7 +55,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       API_PORT: 4000
       API_PUBLIC_URL: ${API_PUBLIC_URL:-https://api.example.ng}
-      MINI_APP_PUBLIC_URL: ${MINI_APP_PUBLIC_URL:-https://app.example.ng}
+      MINI_APP_PUBLIC_URL: ${MINI_APP_PUBLIC_URL:-https://app.example.ng/mini-app}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://app.example.ng}
       API_SESSION_SECRET: ${API_SESSION_SECRET:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql://collage:collage@postgres:5432/collage}
@@ -177,7 +177,7 @@ services:
       REDIS_URL: redis://redis:6379
       WORKER_HEALTH_PORT: 4002
       API_PUBLIC_URL: ${API_PUBLIC_URL:-https://api.example.ng}
-      MINI_APP_PUBLIC_URL: ${MINI_APP_PUBLIC_URL:-https://app.example.ng}
+      MINI_APP_PUBLIC_URL: ${MINI_APP_PUBLIC_URL:-https://app.example.ng/mini-app}
       APP_ENCRYPTION_KEY_ID: ${APP_ENCRYPTION_KEY_ID:-}
       APP_ENCRYPTION_KEY_BASE64: ${APP_ENCRYPTION_KEY_BASE64:-}
       APP_HASH_PEPPER: ${APP_HASH_PEPPER:-}

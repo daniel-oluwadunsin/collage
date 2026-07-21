@@ -142,6 +142,12 @@ services:
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      - key: DEMO_CONTROL_TOKEN
+        value: b949261f466cd1f625afdc7316407c4b6af113600d3ce6d3e8e6b3dca1c4a617
+      - key: DEMO_CONTROLS_ENABLED
+        value: "true"
+      - key: HACKATHON_DEMO_MODE
+        value: "true"
 
   - type: keyvalue
     name: collage-apiconf-redis

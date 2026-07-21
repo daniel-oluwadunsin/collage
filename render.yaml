@@ -47,26 +47,20 @@ services:
         value: 2
       - key: PROVIDER_CALLS_ENABLED
         value: "true"
-      - key: DEMO_CONTROLS_ENABLED
-        value: "true"
-      - key: DEMO_CONTROL_TOKEN
-        sync: false
       - key: MONNIFY_ENV
         value: sandbox
-      - key: HACKATHON_DEMO_MODE
-        value: "true"
       - key: MONNIFY_BASE_URL
         value: https://sandbox.monnify.com
       - key: MONNIFY_API_KEY
-        value: ""
+        value: "MK_TEST_W62HJD3DF9"
       - key: MONNIFY_SECRET_KEY
-        value: ""
+        value: "69NWD9FV39WAWPAHQU50F7CWVKF7EK8D"
       - key: MONNIFY_CONTRACT_CODE
-        value: ""
+        value: "3361686609"
       - key: MONNIFY_DISBURSEMENT_WALLET_ACCOUNT_NUMBER
-        value: ""
+        value: "5615438919"
       - key: MONNIFY_WEBHOOK_ALLOWED_IPS
-        value: 35.242.133.146
+        value: ""
       - key: MONNIFY_ALLOW_UNSIGNED_SANDBOX_WEBHOOKS
         value: "true"
       - key: OTP_PROVIDER

@@ -60,6 +60,9 @@ importers:
       '@collage/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@collage/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@collage/logger':
         specifier: workspace:*
         version: link:../../packages/logger

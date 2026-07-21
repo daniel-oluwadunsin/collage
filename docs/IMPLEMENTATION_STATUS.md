@@ -2,6 +2,42 @@
 
 Last updated: 2026-07-21
 
+## Mini App registered-member count correction
+
+Status: implemented on 2026-07-21.
+
+- [x] Collage status responses now include an authoritative registered-member
+      count computed by PostgreSQL across obligation-bearing member states.
+- [x] The Mini App registration progress uses that server count instead of
+      reconstructing it from grouped diagnostic state totals.
+- [x] Registration-open status is reloaded on mount and every five seconds,
+      then polling stops after the Collage leaves registration, covering
+      Telegram webviews that resume without a browser focus event.
+- [x] Counts remain scoped to the authorized Collage and expose no member PII.
+
+## User-facing naira formatting correction
+
+Status: implemented on 2026-07-21.
+
+- [x] Added one BigInt-safe formatter for server-rendered money presentation.
+- [x] Telegram status, rules, pot, payout, received, and verified-payment
+      notifications use the naira symbol and major units (`₦5,000`) rather
+      than exposing `NGN 500000 minor units`.
+- [x] Non-zero kobo remains visible without converting financial BigInts
+      through JavaScript `number`; provider payloads and DTO minor units remain
+      unchanged.
+
+## Mini App payment-return navigation correction
+
+Status: implemented on 2026-07-21.
+
+- [x] The return action now calls the initialized Telegram SDK close bridge
+      instead of relying only on an optional legacy global object.
+- [x] The close event requests return to the app that opened Telegram where
+      supported, with the legacy bridge and configured bot deep link as safe
+      fallbacks.
+- [x] No redirect or client action is treated as payment confirmation.
+
 ## Render single-container free demo deployment
 
 Status: implemented; validation evidence is recorded below.

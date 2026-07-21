@@ -6,6 +6,7 @@ import {
   type PrismaClient,
   withSerializableTransaction,
 } from "@collage/database";
+import { formatMoneyDisplay } from "@collage/domain";
 import { deterministicJobId } from "@collage/queue";
 import { z } from "zod";
 
@@ -248,7 +249,7 @@ const notificationForEvent = async (
     telegramChatId = contribution.cycle.collage.chat.telegramChatId;
     const identity = contribution.member.user.telegramIdentities[0];
     const name = identity?.firstName ?? identity?.username ?? "Member";
-    text = `<a href="tg://user?id=${contribution.member.telegramUserId}">${escapeTelegramHtml(name)}</a> has paid ${contribution.currency} ${contribution.amountMinor.toString()} minor units for <b>${escapeTelegramHtml(contribution.cycle.collage.name)}</b>, Cycle ${String(contribution.cycle.number)}. Payment was verified by Collage.`;
+    text = `<a href="tg://user?id=${contribution.member.telegramUserId}">${escapeTelegramHtml(name)}</a> has paid ${escapeTelegramHtml(formatMoneyDisplay(contribution.currency, contribution.amountMinor))} for <b>${escapeTelegramHtml(contribution.cycle.collage.name)}</b>, Cycle ${String(contribution.cycle.number)}. Payment was verified by Collage.`;
   } else if (event.eventType.startsWith("payout.")) {
     const payout = await client.payout.findUnique({
       where: { id: event.aggregateId },

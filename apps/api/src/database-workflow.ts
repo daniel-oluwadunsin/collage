@@ -15,6 +15,7 @@ import {
   reservePayoutPosition,
   withSerializableTransaction,
 } from "@collage/database";
+import { formatMoneyDisplay } from "@collage/domain";
 import type { createLogger } from "@collage/logger";
 import {
   MonnifyError,
@@ -51,16 +52,6 @@ const phone = z.string().regex(/^\+[1-9]\d{7,14}$/u);
 export const CARD_SETUP_AMOUNT_MINOR = 5_000n;
 export const CARD_SETUP_POLICY = "COMMITMENT_DEPOSIT" as const;
 const PERSISTENT_LAUNCH_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000;
-
-const formatMoney = (currency: string, amountMinor: bigint): string => {
-  const absolute = amountMinor < 0n ? -amountMinor : amountMinor;
-  const whole = (absolute / 100n)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
-  const fraction = (absolute % 100n).toString().padStart(2, "0");
-  const symbol = currency === "NGN" ? "₦" : `${currency} `;
-  return `${amountMinor < 0n ? "-" : ""}${symbol}${whole}.${fraction}`;
-};
 
 const formatTelegramDate = (value: Date, timeZone: string): string =>
   new Intl.DateTimeFormat("en-NG", {
@@ -342,8 +333,6 @@ const manualRegistrationSchema = z.object({
 
 export class DatabaseWorkflowService implements WorkflowService {
   constructor(private readonly options: DatabaseWorkflowOptions) {}
-
-  async test(): Promise<void> {}
 
   async bootstrap(input: unknown): Promise<ApiData> {
     const value = bootstrapSchema.parse(input);
@@ -761,11 +750,17 @@ export class DatabaseWorkflowService implements WorkflowService {
     collageId: string,
   ): Promise<ApiData> {
     const collage = await this.collageForUser(context, collageId);
-    const [members, currentCycle] = await Promise.all([
+    const [members, registeredMemberCount, currentCycle] = await Promise.all([
       this.options.client.collageMember.groupBy({
         by: ["state"],
         where: { collageId },
         _count: true,
+      }),
+      this.options.client.collageMember.count({
+        where: {
+          collageId,
+          state: { in: ["REGISTERED", "AT_RISK", "DELINQUENT", "DEFAULTED"] },
+        },
       }),
       this.options.client.cycle.findFirst({
         where: { collageId, state: { not: "COMPLETED" } },
@@ -775,6 +770,7 @@ export class DatabaseWorkflowService implements WorkflowService {
     return asData({
       collage,
       memberCounts: members,
+      registeredMemberCount,
       currentCycle:
         currentCycle === null
           ? null
@@ -2599,7 +2595,7 @@ export class DatabaseWorkflowService implements WorkflowService {
             cycle.payout.state,
           ));
       const state = payoutProcessing ? "PAYOUT_PROCESSING" : collage.state;
-      let statusText = `<b>${escapeTelegramHtml(collage.name)}</b>\nState: ${state}\nMembers: ${String(collage._count.members)}/${String(collage.participantLimit)}\nContribution: ${escapeTelegramHtml(formatMoney(collage.currency, collage.contributionAmountMinor))}`;
+      let statusText = `<b>${escapeTelegramHtml(collage.name)}</b>\nState: ${state}\nMembers: ${String(collage._count.members)}/${String(collage.participantLimit)}\nContribution: ${escapeTelegramHtml(formatMoneyDisplay(collage.currency, collage.contributionAmountMinor))}`;
       if (
         ["ACTIVE", "BLOCKED", "PAYOUT_PROCESSING"].includes(state) &&
         cycle !== undefined
@@ -2629,20 +2625,20 @@ export class DatabaseWorkflowService implements WorkflowService {
         statusText +=
           `\n\n<b>Current cycle</b>` +
           `\nDate created: ${escapeTelegramHtml(formatTelegramDate(collage.createdAt, collage.timezone))}` +
-          `\nPot balance: ${escapeTelegramHtml(formatMoney(collage.currency, potRows[0]?.balance ?? 0n))}` +
+          `\nPot balance: ${escapeTelegramHtml(formatMoneyDisplay(collage.currency, potRows[0]?.balance ?? 0n))}` +
           `\nFrequency: ${escapeTelegramHtml(formatFrequency(collage.frequency, collage.frequencyInterval))}` +
           `\nStart date: ${escapeTelegramHtml(formatTelegramDate(collage.startedAt ?? collage.firstCycleStartAt, collage.timezone))}` +
           `\nExpected end date: ${escapeTelegramHtml(formatTelegramDate(finalCycle.deadlineAt, collage.timezone))}` +
           `\nCurrent cycle: ${String(cycle.number)} of ${String(collage.participantLimit)}` +
           `\nCycle deadline: ${escapeTelegramHtml(formatTelegramDate(cycle.deadlineAt, collage.timezone))}` +
           `\nNext to receive: ${escapeTelegramHtml(nextRecipient)}` +
-          `\nExpected payout: ${escapeTelegramHtml(formatMoney(collage.currency, cycle.expectedAmountMinor))}` +
-          `\nReceived this cycle: ${escapeTelegramHtml(formatMoney(collage.currency, cycle.confirmedAmountMinor))}` +
+          `\nExpected payout: ${escapeTelegramHtml(formatMoneyDisplay(collage.currency, cycle.expectedAmountMinor))}` +
+          `\nReceived this cycle: ${escapeTelegramHtml(formatMoneyDisplay(collage.currency, cycle.confirmedAmountMinor))}` +
           `\nPaid this cycle: ${String(paidCount)} of ${String(collage.participantLimit)}` +
           `\nCycles left after this one: ${String(cyclesLeft)}` +
           "\n\nCycle contributions are now due—tap Pay now to open your own verified checkout.";
       }
-      const rulesText = `<b>${escapeTelegramHtml(collage.name)} rules</b>\nContribution: ${escapeTelegramHtml(collage.currency)} ${collage.contributionAmountMinor.toString()} minor units\nFrequency: ${collage.frequency.toLowerCase()}\nParticipants: ${String(collage.participantLimit)}\nOpen Collage to review and consent to the complete immutable rules.`;
+      const rulesText = `<b>${escapeTelegramHtml(collage.name)} rules</b>\nContribution: ${escapeTelegramHtml(formatMoneyDisplay(collage.currency, collage.contributionAmountMinor))}\nFrequency: ${collage.frequency.toLowerCase()}\nParticipants: ${String(collage.participantLimit)}\nOpen Collage to review and consent to the complete immutable rules.`;
       return asData({
         state,
         text: value.variant === "rules" ? rulesText : statusText,

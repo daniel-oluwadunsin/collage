@@ -50,6 +50,32 @@ export const formatMoneyDecimal = (
     : `${whole.toString()}.${fraction}`;
 };
 
+/** Formats minor units for people without converting the bigint through Number. */
+export const formatMoneyDisplay = (
+  currency: string,
+  value: bigint,
+  fractionDigits = 2,
+): string => {
+  if (!Number.isSafeInteger(fractionDigits) || fractionDigits < 0) {
+    throw new DomainInvariantError(
+      "MONEY_INVALID_FRACTION_DIGITS",
+      "Money fraction digits must be a non-negative safe integer.",
+    );
+  }
+  const absolute = value < 0n ? -value : value;
+  const scale = 10n ** BigInt(fractionDigits);
+  const whole = (absolute / scale)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+  const fraction = absolute % scale;
+  const fractionText =
+    fractionDigits > 0 && fraction > 0n
+      ? `.${fraction.toString().padStart(fractionDigits, "0")}`
+      : "";
+  const symbol = currency.toUpperCase() === "NGN" ? "₦" : `${currency} `;
+  return `${value < 0n ? "-" : ""}${symbol}${whole}${fractionText}`;
+};
+
 export const serializeMoneyMinor = (value: MoneyMinor): string =>
   value.toString();
 

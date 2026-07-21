@@ -284,3 +284,12 @@ Reconsulted on 2026-07-19:
 - [Telegram Mini Apps initialization](https://core.telegram.org/bots/webapps#initializing-mini-apps) —
   server validation of init data remains mandatory for the actual user opening
   a shared group action.
+
+## Mini App return navigation
+
+Reconsulted on 2026-07-21:
+
+- [Telegram Mini Apps](https://core.telegram.org/bots/webapps) — the official
+  `WebApp.close()` bridge emits the Mini App close event; Collage uses the SDK
+  bridge first and requests return to the app that opened an external deep
+  link. A bot `t.me` link is retained only as a regular-browser fallback.

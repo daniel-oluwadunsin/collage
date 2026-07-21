@@ -72,6 +72,7 @@ export const cycleSchema = z.object({
 
 export const statusSchema = z.object({
   collage: collageSchema,
+  registeredMemberCount: z.number().int().nonnegative(),
   memberCounts: z.array(
     z.object({ state: z.string(), _count: z.number().int().nonnegative() }),
   ),

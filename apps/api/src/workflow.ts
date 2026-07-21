@@ -14,7 +14,6 @@ export interface RequestContext {
 }
 
 export interface WorkflowService {
-  test(): Promise<void>;
   bootstrap(input: unknown, requestId: string): Promise<ApiData>;
   createCollage(context: RequestContext, input: unknown): Promise<ApiData>;
   getCollage(context: RequestContext, collageId: string): Promise<ApiData>;
@@ -140,7 +139,6 @@ const unavailable = (): Promise<never> =>
   Promise.reject(new Error("Workflow service is not configured"));
 
 export const unavailableWorkflowService: WorkflowService = {
-  test: unavailable,
   bootstrap: unavailable,
   createCollage: unavailable,
   getCollage: unavailable,

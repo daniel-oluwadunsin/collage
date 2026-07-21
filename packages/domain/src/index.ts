@@ -23,6 +23,7 @@ export {
   addMoney,
   asMoneyMinor,
   formatMoneyDecimal,
+  formatMoneyDisplay,
   isNonNegativeMoney,
   multiplyMoney,
   parseMoneyDecimal,

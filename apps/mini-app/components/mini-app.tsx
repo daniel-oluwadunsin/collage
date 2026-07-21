@@ -186,6 +186,9 @@ function CollageRoute({
   const status = useQuery({
     queryKey: ["status", collageId],
     queryFn: () => api.request(`/collages/${collageId}/status`, statusSchema),
+    refetchInterval: (query) =>
+      query.state.data?.collage.state === "REGISTRATION_OPEN" ? 5_000 : false,
+    refetchOnMount: "always",
   });
   const registration = useQuery({
     queryKey: ["registration", collageId],

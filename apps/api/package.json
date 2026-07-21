@@ -15,6 +15,7 @@
     "@collage/config": "workspace:*",
     "@collage/contracts": "workspace:*",
     "@collage/database": "workspace:*",
+    "@collage/domain": "workspace:*",
     "@collage/logger": "workspace:*",
     "@collage/monnify": "workspace:*",
     "@collage/queue": "workspace:*",

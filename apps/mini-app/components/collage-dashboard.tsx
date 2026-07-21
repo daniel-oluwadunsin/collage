@@ -875,11 +875,7 @@ function ReplacePaymentMethodFlow({
 }
 
 const registeredCount = (status: Status): number =>
-  status.memberCounts
-    .filter(({ state }) =>
-      ["REGISTERED", "AT_RISK", "DELINQUENT", "DEFAULTED"].includes(state),
-    )
-    .reduce((sum, item) => sum + item._count, 0);
+  status.registeredMemberCount;
 
 function Summary({
   term,

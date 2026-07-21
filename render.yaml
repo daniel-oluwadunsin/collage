@@ -162,6 +162,24 @@ services:
         value: "true"
       - key: HACKATHON_DEMO_MODE
         value: "true"
+      - key: GROQ_API_KEY
+        value: "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"
+      - key: GROQ_MODEL
+        value: "openai/gpt-oss-20b"
+      - key: GROQ_TIMEOUT_MS
+        value: "8000"
+      - key: GROQ_REASONING_EFFORT
+        value: "low"
+      - key: GROQ_MAX_TOOL_CALLS
+        value: "1"
+      - key: ASSISTANT_ENABLED
+        value: "true"
+      - key: ASSISTANT_MAX_MESSAGE_LENGTH
+        value: "1000"
+      - key: ASSISTANT_USER_RATE_LIMIT_PER_MINUTE
+        value: "5"
+      - key: ASSISTANT_CHAT_RATE_LIMIT_PER_MINUTE
+        value: "20"
 
   - type: keyvalue
     name: collage-apiconf-redis

@@ -45,4 +45,4 @@ packages/database/generated/
 # Docker/local data
 .docker/
 
-prompts
+/prompts

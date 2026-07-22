@@ -343,7 +343,6 @@ See [Known Limitations](docs/KNOWN_LIMITATIONS.md) for the maintained blocker li
 - [ ] All static checks, builds, migrations, integration suites, critical Playwright flows, image builds, and full Compose/deployment smoke tests pass in the release environment.
 - [ ] Rate limits, worker concurrency, retry thresholds, provider polling, and Telegram delivery capacity load-tested.
 - [ ] Audit-log review, financial reconciliation, stuck-operation recovery, provider incident, and rollback runbooks rehearsed.
-- [ ] `PROVIDER_CALLS_ENABLED` turned on only after every preceding money-moving gate is satisfied.
 
 ## Documentation
 
@@ -359,13 +358,3 @@ See [Known Limitations](docs/KNOWN_LIMITATIONS.md) for the maintained blocker li
 - [Telegram setup](docs/TELEGRAM_SETUP.md)
 - [Monnify setup](docs/MONNIFY_SETUP.md)
 - [Deployment](docs/DEPLOYMENT.md)
-- [Operations runbook](docs/OPERATIONS_RUNBOOK.md)
-- [Demo script](docs/DEMO_SCRIPT.md)
-- [Known limitations](docs/KNOWN_LIMITATIONS.md)
-- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
-- [Provider references](docs/PROVIDER_REFERENCES.md)
-- [Architecture decisions](docs/DECISIONS.md)
-
-## Project status
-
-Collage is a comprehensive, demo-ready MVP with implemented Telegram, Mini App, API, worker, ledger, Monnify adapter, and constrained AI-assistant flows. It remains fail-closed for real provider calls and is not approved for production money movement until the checklist and provider/compliance blockers above are resolved.

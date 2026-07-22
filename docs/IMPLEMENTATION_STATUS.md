@@ -2,6 +2,38 @@
 
 Last updated: 2026-07-21
 
+## Comprehensive repository README
+
+Status: implemented on 2026-07-22.
+
+- [x] Replaced the minimal root README with a product, architecture, safety,
+      AI-assistant, workflow, repository-structure, setup, environment,
+      deployment, provider, testing, demo, limitation, and production-readiness
+      guide grounded in the current source tree and maintained documentation.
+- [x] Documented all variables present in the canonical `.env.example` by
+      responsibility and linked the variable-by-variable environment runbook.
+- [x] Preserved explicit fail-closed language for redirects, ambiguous provider
+      outcomes, webhooks, payouts, ledger truth, sensitive data, AI authority,
+      and `PROVIDER_CALLS_ENABLED`.
+- [x] Reconfirmed the canonical design specification covers Collage Yellow
+      `#FFD85C`, Collage Blue `#0357EE`, dark/light themes, Telegram webview
+      constraints, and loading/error/provider-pending states; no deviation was
+      identified for this documentation-only change.
+
+### Verification evidence
+
+| Evidence                        | Result                                       |
+| ------------------------------- | -------------------------------------------- |
+| `pnpm format:check`             | Pass                                         |
+| `git diff --check`              | Pass                                         |
+| `pnpm lint`                     | Pass — 28 Turbo tasks                        |
+| `pnpm typecheck`                | Pass — 28 Turbo tasks                        |
+| `pnpm build`                    | Pass — 16 Turbo tasks and all Next.js routes |
+| `docker compose config --quiet` | Pass                                         |
+
+No unit, integration, or Playwright files exist to rerun because the
+product-owner-mandated repository test deletion remains in effect.
+
 ## Public landing page and Mini App route split
 
 Status: implemented on 2026-07-21; verification evidence is recorded below.

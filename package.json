@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=.env ./node_modules/turbo/bin/turbo run dev --env-mode=loose",
-    "build": "turbo run build",
+    "dev": "node api.js && node --env-file=.env ./node_modules/turbo/bin/turbo run dev --env-mode=loose",
+    "build": "node api.js && turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
